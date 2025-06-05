@@ -1,5 +1,3 @@
-# import sys
-# import os
 from tkinter import Tk
 from gui.main_window import MainPage
 

@@ -1,6 +1,5 @@
 import csv
 import time
-import random
 
 def generate_random_values(start_y, end_y, step_y):
     x = 256

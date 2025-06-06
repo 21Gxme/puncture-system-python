@@ -3,10 +3,8 @@ import numpy as np
 from tkinter import  Menu, filedialog, END
 import shutil
 from vispy import scene
-# import threading
-# import time
 
-from data_structures import Vector3D, NeedleInfo
+from data_structures import Vector3D
 from handlers.dicom_handler import DicomHandler
 from handlers.visualization_handler import VisualizationHandler
 from handlers.csv_handler import CSVHandler
@@ -54,7 +52,7 @@ class MainPage:
         self.ImageStride = 512 * 2
         self.ImagePixelSize = 512 * 512 * 2
         self.MaxCTvalue = 0
-        self.CT_Ajust = -1000
+        self.CT_Adjust = -1000
 
         self.needleVector = []
         self.ok = 0

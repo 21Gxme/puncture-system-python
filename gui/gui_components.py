@@ -1,5 +1,6 @@
 from tkinter import Frame, Label, Button, Listbox, Scale, HORIZONTAL, Canvas, Scrollbar, VERTICAL 
-from PIL import ImageTk
+from PIL import Image, ImageTk
+import numpy as np
 
 
 class GUIComponents:
@@ -40,6 +41,16 @@ class GUIComponents:
         stop_button = Button(self.toolbar, text="Stop Real-Time Route", command=self.main_app.stop_realtime_data)
         stop_button.pack(side="left")
 
+        # Add zoom control buttons
+        zoom_frame = Frame(self.toolbar)
+        zoom_frame.pack(side="right", padx=10)
+
+        # All planes zoom controls
+        Label(zoom_frame, text="All Planes:").grid(row=0, column=0, padx=2)
+        Button(zoom_frame, text="Zoom In All", command=self.main_app.zoom_in_all, bg="lightgreen").grid(row=0, column=1, padx=1)
+        Button(zoom_frame, text="Zoom Out All", command=self.main_app.zoom_out_all, bg="lightcoral").grid(row=0, column=2, padx=1)
+        Button(zoom_frame, text="Reset All", command=self.main_app.reset_zoom_all, bg="lightblue").grid(row=0, column=3, padx=1)
+
     def init_sidebar(self):
         """Initialize the sidebar"""
         self.sidebar = Frame(self.root)
@@ -50,6 +61,56 @@ class GUIComponents:
         self.list_view.bind("<<ListboxSelect>>", self.main_app.list_view_item_click)
 
         self.init_sliders()
+        self.init_zoom_controls()
+
+    def init_zoom_controls(self):
+        """Initialize individual plane zoom controls"""
+        zoom_frame = Frame(self.sidebar)
+        zoom_frame.pack(fill="x", padx=5, pady=5)
+
+        Label(zoom_frame, text="Zoom Controls", font=("Arial", 10, "bold")).pack()
+
+        # XY Plane controls
+        xy_frame = Frame(zoom_frame)
+        xy_frame.pack(fill="x", pady=2)
+        Label(xy_frame, text="XY Plane:", fg="purple").pack(side="left")
+        Button(xy_frame, text="+", command=self.main_app.zoom_in_xy, width=3, bg="lightgreen").pack(side="left", padx=1)
+        Button(xy_frame, text="-", command=self.main_app.zoom_out_xy, width=3, bg="lightcoral").pack(side="left", padx=1)
+        Button(xy_frame, text="Reset", command=self.main_app.reset_zoom_xy, width=5, bg="lightblue").pack(side="left", padx=1)
+
+        # YZ Plane controls
+        yz_frame = Frame(zoom_frame)
+        yz_frame.pack(fill="x", pady=2)
+        Label(yz_frame, text="YZ Plane:", fg="blue").pack(side="left")
+        Button(yz_frame, text="+", command=self.main_app.zoom_in_yz, width=3, bg="lightgreen").pack(side="left", padx=1)
+        Button(yz_frame, text="-", command=self.main_app.zoom_out_yz, width=3, bg="lightcoral").pack(side="left", padx=1)
+        Button(yz_frame, text="Reset", command=self.main_app.reset_zoom_yz, width=5, bg="lightblue").pack(side="left", padx=1)
+
+        # XZ Plane controls
+        xz_frame = Frame(zoom_frame)
+        xz_frame.pack(fill="x", pady=2)
+        Label(xz_frame, text="XZ Plane:", fg="orange").pack(side="left")
+        Button(xz_frame, text="+", command=self.main_app.zoom_in_xz, width=3, bg="lightgreen").pack(side="left", padx=1)
+        Button(xz_frame, text="-", command=self.main_app.zoom_out_xz, width=3, bg="lightcoral").pack(side="left", padx=1)
+        Button(xz_frame, text="Reset", command=self.main_app.reset_zoom_xz, width=5, bg="lightblue").pack(side="left", padx=1)
+
+        # Zoom level display
+        self.zoom_info_frame = Frame(zoom_frame)
+        self.zoom_info_frame.pack(fill="x", pady=5)
+        self.zoom_info_label = Label(self.zoom_info_frame, text="Zoom: XY=1.0 YZ=1.0 XZ=1.0", font=("Arial", 8))
+        self.zoom_info_label.pack()
+
+    def update_zoom_info(self):
+        """Update zoom level display with needle information"""
+        zoom_text = f"Zoom: XY={self.main_app.zoom_xy:.1f} YZ={self.main_app.zoom_yz:.1f} XZ={self.main_app.zoom_xz:.1f}"
+        
+        # Add needle center information if available
+        needle_center_xy = self.main_app.get_needle_center_xy()
+        if needle_center_xy:
+            needle_text = f"\nNeedle Center: ({needle_center_xy[0]:.1f}, {needle_center_xy[1]:.1f})"
+            zoom_text += needle_text
+        
+        self.zoom_info_label.config(text=zoom_text)
 
     def init_sliders(self):
         """Initialize control sliders"""
@@ -113,27 +174,112 @@ class GUIComponents:
 
         self.panels.extend([self.panel2, self.panel3, self.panel4])
 
+        # Add mouse wheel zoom support to panels
+        self.setup_mouse_zoom()
+
+    def setup_mouse_zoom(self):
+        """Setup mouse wheel zoom for panels"""
+        def on_mouse_wheel(event, panel_num):
+            # Store old zoom values for pan calculation
+            old_zoom = None
+            if panel_num == 0:
+                old_zoom = self.main_app.zoom_xy
+            elif panel_num == 1:
+                old_zoom = self.main_app.zoom_yz
+            elif panel_num == 2:
+                old_zoom = self.main_app.zoom_xz
+        
+            if event.delta > 0:
+                if panel_num == 0:
+                    self.main_app.zoom_in_xy()
+                elif panel_num == 1:
+                    self.main_app.zoom_in_yz()
+                elif panel_num == 2:
+                    self.main_app.zoom_in_xz()
+            else:
+                if panel_num == 0:
+                    self.main_app.zoom_out_xy()
+                elif panel_num == 1:
+                    self.main_app.zoom_out_yz()
+                elif panel_num == 2:
+                    self.main_app.zoom_out_xz()
+        
+            self.update_zoom_info()
+
+        # Bind mouse wheel events to each panel
+        for i, panel in enumerate(self.panels):
+            panel.canvas.bind("<MouseWheel>", lambda event, num=i: on_mouse_wheel(event, num))
+            # For Linux systems
+            panel.canvas.bind("<Button-4>", lambda event, num=i: on_mouse_wheel(type('MockEvent', (), {'delta': 120})(), num))
+            panel.canvas.bind("<Button-5>", lambda event, num=i: on_mouse_wheel(type('MockEvent', (), {'delta': -120})(), num))
+
     def create_panel(self, label_text, x_color, y_color):
         """Create a display panel"""
         panel = Frame(self.content_frame, bg="black", width=512, height=512)
         panel.pack_propagate(False)
         panel.canvas = Canvas(panel, bg="black")
         panel.canvas.pack(fill="both", expand=True, anchor="center")
+        
+        # Add plane label
+        panel.plane_label = label_text
+        
         return panel
         
-    def update_panel_image(self, panel, image_data):
-        """Update image in a panel"""
-        image = self.main_app.dicom_handler.make_2d_image(image_data) if image_data is not None else None
-        photo = ImageTk.PhotoImage(image=image) if image_data is not None else None
-        panel.canvas.delete("axes")
+    def update_panel_image(self, panel, image_data, zoom=1.0):
+        """Update image in a panel with zoom support"""
+        if image_data is None:
+            return
+    
+        # Create PIL image from data
+        image = self.main_app.dicom_handler.make_2d_image(image_data) if hasattr(self.main_app.dicom_handler, 'make_2d_image') else self.create_image_from_array(image_data)
+    
+        if image is None:
+            return
+    
+        # Apply zoom transformation
+        if zoom != 1.0:
+            new_width = int(image.width * zoom)
+            new_height = int(image.height * zoom)
+            image = image.resize((new_width, new_height), Image.LANCZOS)
+    
+        photo = ImageTk.PhotoImage(image=image)
+    
+        # Clear previous content but keep needle and realtime lines
         panel.canvas.delete("images")
-
+    
         if photo:
-            canvas_width = panel.canvas.winfo_width()
-            canvas_height = panel.canvas.winfo_height()
+            canvas_width = panel.canvas.winfo_width() or 512
+            canvas_height = panel.canvas.winfo_height() or 512
             image_width = photo.width()
             image_height = photo.height()
+        
+            # Center the image in canvas
             x = (canvas_width - image_width) // 2
             y = (canvas_height - image_height) // 2
-            panel.canvas.create_image(x, y, image=photo, anchor='nw')
-            panel.canvas.image = photo
+    
+            panel.canvas.create_image(x, y, image=photo, anchor='nw', tags="images")
+            panel.canvas.image = photo  # Keep a reference
+    
+            # Ensure needle and realtime lines are drawn on top
+            panel.canvas.tag_raise("needle")
+            panel.canvas.tag_raise("realtime")
+            panel.canvas.tag_raise("axes")
+    
+        # Update zoom info display
+        self.update_zoom_info()
+
+    def create_image_from_array(self, array):
+        """Create PIL Image from numpy array"""
+        try:
+            # Normalize the array to 0-255 range
+            if array.dtype != np.uint8:
+                array_normalized = ((array - array.min()) / (array.max() - array.min()) * 255).astype(np.uint8)
+            else:
+                array_normalized = array
+            
+            # Create PIL Image
+            image = Image.fromarray(array_normalized, mode='L')  # 'L' for grayscale
+            return image
+        except Exception as e:
+            print(f"Error creating image from array: {e}")
+            return None

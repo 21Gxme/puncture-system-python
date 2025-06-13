@@ -1,4 +1,4 @@
-from tkinter import Frame, Label, Button, Listbox, Scale, HORIZONTAL, Canvas, Scrollbar, VERTICAL 
+from tkinter import Frame, Label, Button, Listbox, Scale, HORIZONTAL, Canvas, Scrollbar, VERTICAL, DoubleVar
 from PIL import Image, ImageTk
 import numpy as np
 
@@ -59,8 +59,6 @@ class GUIComponents:
 
         # All planes zoom controls
         Label(zoom_frame, text="All Planes:").grid(row=0, column=0, padx=2)
-        Button(zoom_frame, text="Zoom In All", command=self.main_app.zoom_in_all, bg="lightgreen").grid(row=0, column=1, padx=1)
-        Button(zoom_frame, text="Zoom Out All", command=self.main_app.zoom_out_all, bg="lightcoral").grid(row=0, column=2, padx=1)
         Button(zoom_frame, text="Reset All", command=self.main_app.reset_zoom_all, bg="lightblue").grid(row=0, column=3, padx=1)
 
     def init_sidebar(self):
@@ -86,24 +84,27 @@ class GUIComponents:
         xy_frame = Frame(zoom_frame)
         xy_frame.pack(fill="x", pady=2)
         Label(xy_frame, text="XY Plane:", fg="purple").pack(side="left")
-        Button(xy_frame, text="+", command=self.main_app.zoom_in_xy, width=3, bg="lightgreen").pack(side="left", padx=1)
-        Button(xy_frame, text="-", command=self.main_app.zoom_out_xy, width=3, bg="lightcoral").pack(side="left", padx=1)
+        self.xy_zoom_var = DoubleVar(value=self.main_app.zoom_xy)
+        xy_slider = Scale(xy_frame, from_=self.main_app.min_zoom, to=self.main_app.max_zoom, orient=HORIZONTAL, command=self.main_app.zoom_xy_slider_changed, variable=self.xy_zoom_var, resolution=0.1)
+        xy_slider.pack(side="left", padx=1)
         Button(xy_frame, text="Reset", command=self.main_app.reset_zoom_xy, width=5, bg="lightblue").pack(side="left", padx=1)
 
         # YZ Plane controls
         yz_frame = Frame(zoom_frame)
         yz_frame.pack(fill="x", pady=2)
         Label(yz_frame, text="YZ Plane:", fg="blue").pack(side="left")
-        Button(yz_frame, text="+", command=self.main_app.zoom_in_yz, width=3, bg="lightgreen").pack(side="left", padx=1)
-        Button(yz_frame, text="-", command=self.main_app.zoom_out_yz, width=3, bg="lightcoral").pack(side="left", padx=1)
+        self.yz_zoom_var = DoubleVar(value=self.main_app.zoom_yz)
+        yz_slider = Scale(yz_frame, from_=self.main_app.min_zoom, to=self.main_app.max_zoom, orient=HORIZONTAL, command=self.main_app.zoom_yz_slider_changed, variable=self.yz_zoom_var, resolution=0.1)
+        yz_slider.pack(side="left", padx=1)
         Button(yz_frame, text="Reset", command=self.main_app.reset_zoom_yz, width=5, bg="lightblue").pack(side="left", padx=1)
 
         # XZ Plane controls
         xz_frame = Frame(zoom_frame)
         xz_frame.pack(fill="x", pady=2)
         Label(xz_frame, text="XZ Plane:", fg="orange").pack(side="left")
-        Button(xz_frame, text="+", command=self.main_app.zoom_in_xz, width=3, bg="lightgreen").pack(side="left", padx=1)
-        Button(xz_frame, text="-", command=self.main_app.zoom_out_xz, width=3, bg="lightcoral").pack(side="left", padx=1)
+        self.xz_zoom_var = DoubleVar(value=self.main_app.zoom_xz)
+        xz_slider = Scale(xz_frame, from_=self.main_app.min_zoom, to=self.main_app.max_zoom, orient=HORIZONTAL, command=self.main_app.zoom_xz_slider_changed, variable=self.xz_zoom_var, resolution=0.1)
+        xz_slider.pack(side="left", padx=1)
         Button(xz_frame, text="Reset", command=self.main_app.reset_zoom_xz, width=5, bg="lightblue").pack(side="left", padx=1)
 
         # Zoom level display
@@ -365,4 +366,3 @@ class GUIComponents:
         except Exception as e:
             print(f"Error creating image from array: {e}")
             return None
-        

@@ -668,3 +668,18 @@ class MainPage:
         canvas_y = offset_y + (image_y * zoom_factor)
         
         return canvas_x, canvas_y
+    
+    def zoom_xy_slider_changed(self, value):
+        """Handle XY zoom slider value changes"""
+        self.zoom_xy = float(value)
+        self.update_images()
+
+    def zoom_yz_slider_changed(self, value):
+        """Handle YZ zoom slider value changes"""
+        self.zoom_yz = float(value)
+        self.update_images()
+
+    def zoom_xz_slider_changed(self, value):
+        """Handle XZ zoom slider value changes"""
+        self.zoom_xz = float(value)
+        self.update_images()

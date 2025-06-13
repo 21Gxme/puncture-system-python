@@ -77,6 +77,10 @@ class MainPage:
         self.point_start = None
         self.point_end = None
         
+        self.pan_xy = [0, 0]  # [x_offset, y_offset]
+        self.pan_yz = [0, 0]
+        self.pan_xz = [0, 0]
+        
         # Store original needle coordinates in image space (0-512 range)
         self.original_needle_coords = {
             'xy': {'start': None, 'end': None},
@@ -393,6 +397,43 @@ class MainPage:
         canvas_y = offset_y + (image_y * zoom_factor)
         
         return canvas_x, canvas_y
+    
+    def reset_pan_all(self):
+        """Reset pan for all planes"""
+        self.pan_xy = [0, 0]
+        self.pan_yz = [0, 0]
+        self.pan_xz = [0, 0]
+        self.update_images()
+
+    def reset_pan_xy(self):
+        """Reset XY plane pan"""
+        self.pan_xy = [0, 0]
+        self.update_images()
+
+    def reset_pan_yz(self):
+        """Reset YZ plane pan"""
+        self.pan_yz = [0, 0]
+        self.update_images()
+
+    def reset_pan_xz(self):
+        """Reset XZ plane pan"""
+        self.pan_xz = [0, 0]
+        self.update_images()
+
+    def update_single_panel(self, panel_num):
+        """Update a single panel"""
+        if panel_num < len(self.gui_components.panels):
+            self.load_panel_image(self.gui_components.panels[panel_num], panel_num)
+
+    def get_pan_for_panel(self, panel_num):
+        """Get pan offset for specific panel"""
+        if panel_num == 0:  # XY plane
+            return tuple(self.pan_xy)
+        elif panel_num == 1:  # YZ plane
+            return tuple(self.pan_yz)
+        elif panel_num == 2:  # XZ plane
+            return tuple(self.pan_xz)
+        return (0, 0)
 
     def input_plan_coor_data(self):
         """Load planned coordinates from CSV"""
@@ -556,3 +597,74 @@ class MainPage:
         self.gui_components.panel2.canvas.delete("realtime")
         if hasattr(self.visualization_handler, 'realtime_line_vispy'):
             self.visualization_handler.realtime_line_vispy.set_data(np.array([]))
+    # Modify the load_panel_image method to include pan support:
+    def load_panel_image(self, pa, num):
+        """Load image for a specific panel with zoom and pan support"""
+        if self.IsSelectedItem == 0:
+            return
+        try:
+            if num == 0:
+                image_2d = self.volume3d[:, :, self.Z]
+            elif num == 1:
+                image_2d = np.flipud(np.rot90(self.volume3d[:, self.Y, :]))
+            elif num == 2:
+                image_2d = np.flipud(np.rot90(self.volume3d[self.X, :, :]))
+            else:
+                image_2d = np.zeros((512, 512), dtype=np.int16)
+        except (IndexError, AttributeError):
+            image_2d = np.zeros((512, 512), dtype=np.int16)
+        
+        # Get zoom and pan for this panel
+        zoom = self.get_zoom_for_panel(num)
+        pan_offset = self.get_pan_for_panel(num)
+        
+        self.gui_components.update_panel_image(pa, image_2d, zoom, pan_offset)
+        
+        # Draw axes with zoom and pan consideration
+        if pa == self.gui_components.panel2:
+            self.draw_axes_value_change(pa, "magenta", "yellow", self.Y, self.X)
+        elif pa == self.gui_components.panel3:
+            self.draw_axes_value_change(pa, "blue", "magenta", self.X, self.Z_for_axis)
+        elif pa == self.gui_components.panel4:
+            self.draw_axes_value_change(pa, "blue", "yellow", self.Y, self.Z_for_axis)
+        
+        try:
+            if not self.is_clear:
+                self.draw_needle_plan()
+        except AttributeError:
+            pass
+
+    # Update the get_canvas_coordinates method to include pan offset:
+    def get_canvas_coordinates(self, panel, image_x, image_y, plane_type):
+        """Transform image coordinates to canvas coordinates with proper zoom and pan handling"""
+        # Get canvas dimensions
+        canvas_width = panel.canvas.winfo_width() or 512
+        canvas_height = panel.canvas.winfo_height() or 512
+        
+        # Get current zoom factor and pan offset for the plane
+        if plane_type == 'xy':
+            zoom_factor = self.zoom_xy
+            pan_offset = self.pan_xy
+        elif plane_type == 'yz':
+            zoom_factor = self.zoom_yz
+            pan_offset = self.pan_yz
+        elif plane_type == 'xz':
+            zoom_factor = self.zoom_xz
+            pan_offset = self.pan_xz
+        else:
+            zoom_factor = 1.0
+            pan_offset = [0, 0]
+        
+        # Calculate zoomed image size
+        zoomed_width = 512 * zoom_factor
+        zoomed_height = 512 * zoom_factor
+        
+        # Center the zoomed image in canvas and apply pan offset
+        offset_x = (canvas_width - zoomed_width) / 2 + pan_offset[0]
+        offset_y = (canvas_height - zoomed_height) / 2 + pan_offset[1]
+        
+        # Transform coordinates
+        canvas_x = offset_x + (image_x * zoom_factor)
+        canvas_y = offset_y + (image_y * zoom_factor)
+        
+        return canvas_x, canvas_y

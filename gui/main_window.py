@@ -369,33 +369,31 @@ class MainPage:
             self.load_panel_image(pa, num)
 
     def get_canvas_coordinates(self, panel, image_x, image_y, plane_type):
-        """Transform image coordinates to canvas coordinates with proper zoom handling"""
-        # Get canvas dimensions
         canvas_width = panel.canvas.winfo_width() or 512
         canvas_height = panel.canvas.winfo_height() or 512
-        
-        # Get current zoom factor for the plane
+
         if plane_type == 'xy':
             zoom_factor = self.zoom_xy
+            pan_offset = self.pan_xy
         elif plane_type == 'yz':
             zoom_factor = self.zoom_yz
+            pan_offset = self.pan_yz
         elif plane_type == 'xz':
             zoom_factor = self.zoom_xz
+            pan_offset = self.pan_xz
         else:
             zoom_factor = 1.0
-        
-        # Calculate zoomed image size
+            pan_offset = [0, 0]
+
         zoomed_width = 512 * zoom_factor
         zoomed_height = 512 * zoom_factor
-        
-        # Center the zoomed image in canvas
-        offset_x = (canvas_width - zoomed_width) / 2
-        offset_y = (canvas_height - zoomed_height) / 2
-        
-        # Transform coordinates
+
+        offset_x = (canvas_width - zoomed_width) / 2 + pan_offset[0]
+        offset_y = (canvas_height - zoomed_height) / 2 + pan_offset[1]
+
         canvas_x = offset_x + (image_x * zoom_factor)
         canvas_y = offset_y + (image_y * zoom_factor)
-        
+
         return canvas_x, canvas_y
     
     def reset_pan_all(self):
@@ -421,9 +419,11 @@ class MainPage:
         self.update_images()
 
     def update_single_panel(self, panel_num):
-        """Update a single panel"""
         if panel_num < len(self.gui_components.panels):
             self.load_panel_image(self.gui_components.panels[panel_num], panel_num)
+        # Draw new lines
+        self.draw_realtime_line()
+        self.draw_needle_plan()
 
     def get_pan_for_panel(self, panel_num):
         """Get pan offset for specific panel"""
@@ -452,16 +452,16 @@ class MainPage:
                 'end': (self.point_end[0], self.point_end[1])
             },
             'yz': {
-                'start': (self.point_start[1] if len(self.point_start) > 1 else 256, 
-                         self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis),
+                'start': (self.point_start[1] if len(self.point_start) > 1 else 256,
+                        400 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)), 
                 'end': (self.point_end[1] if len(self.point_end) > 1 else 256,
-                       self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis)
+                        400 - (self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis))
             },
             'xz': {
-                'start': (self.point_start[0], 
-                         self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis),
+                'start': (self.point_start[0],
+                        400 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)), 
                 'end': (self.point_end[0],
-                       self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis)
+                        400 - (self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis))
             }
         }
         
@@ -548,25 +548,35 @@ class MainPage:
                 if plane == "xy":
                     x0, y0 = self.csv_handler.realtime_points[i-1][:2]
                     x1, y1 = self.csv_handler.realtime_points[i][:2]
+                    
+                    # Transform to canvas coordinates
+                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane)
+                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane)
+                    
                 elif plane == "yz":
                     point0 = self.csv_handler.realtime_points[i-1]
                     point1 = self.csv_handler.realtime_points[i]
-                    x0 = point0[1] if len(point0) > 1 else 256
-                    y0 = point0[2] if len(point0) > 2 else self.Z_for_axis
-                    x1 = point1[1] if len(point1) > 1 else 256
-                    y1 = point1[2] if len(point1) > 2 else self.Z_for_axis
+                    y0 = point0[1] if len(point0) > 1 else 256
+                    z0 = point0[2] if len(point0) > 2 else self.Z_for_axis
+                    y1 = point1[1] if len(point1) > 1 else 256
+                    z1 = point1[2] if len(point1) > 2 else self.Z_for_axis
+
+                    # Adjust height - use a middle position
+                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, y0, 400-z0, plane)
+                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, y1, 400-z1, plane)
+
                 elif plane == "xz":
                     point0 = self.csv_handler.realtime_points[i-1]
                     point1 = self.csv_handler.realtime_points[i]
                     x0 = point0[0] if len(point0) > 0 else 256
-                    y0 = point0[2] if len(point0) > 2 else self.Z_for_axis
+                    z0 = point0[2] if len(point0) > 2 else self.Z_for_axis
                     x1 = point1[0] if len(point1) > 0 else 256
-                    y1 = point1[2] if len(point1) > 2 else self.Z_for_axis
-                
-                # Transform to canvas coordinates
-                x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane)
-                x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane)
-                
+                    z1 = point1[2] if len(point1) > 2 else self.Z_for_axis
+                    
+                    # Adjust height - use a middle position
+                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, 400-z0, plane)
+                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, 400-z1, plane)
+                                
                 # Draw the line segment
                 self.create_dash_line(panel.canvas, x0_screen, y0_screen, x1_screen, y1_screen, fill="red", tags="realtime")
 

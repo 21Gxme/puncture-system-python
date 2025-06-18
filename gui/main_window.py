@@ -156,19 +156,17 @@ class MainPage:
     def get_needle_center_yz(self):
         """Get the center point of the needle in YZ plane coordinates"""
         if self.point_start and self.point_end:
-            # For YZ plane, we use Y and Z coordinates
             center_y = (self.point_start[1] + self.point_end[1]) / 2
             center_z = (self.point_start[2] + self.point_end[2]) / 2 if len(self.point_start) > 2 else self.Z_for_axis
-            return [center_y, center_z]
+            return [center_y, 390 - center_z]
         return None
 
     def get_needle_center_xz(self):
         """Get the center point of the needle in XZ plane coordinates"""
         if self.point_start and self.point_end:
-            # For XZ plane, we use X and Z coordinates
             center_x = (self.point_start[0] + self.point_end[0]) / 2
             center_z = (self.point_start[2] + self.point_end[2]) / 2 if len(self.point_start) > 2 else self.Z_for_axis
-            return [center_x, center_z]
+            return [center_x, 390 - center_z]
         return None
 
     def reset_zoom_xy(self):
@@ -453,15 +451,15 @@ class MainPage:
             },
             'yz': {
                 'start': (self.point_start[1] if len(self.point_start) > 1 else 256,
-                        400 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)), 
+                        390 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)), 
                 'end': (self.point_end[1] if len(self.point_end) > 1 else 256,
-                        400 - (self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis))
+                        390 - (self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis))
             },
             'xz': {
                 'start': (self.point_start[0],
-                        400 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)), 
+                        390 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)), 
                 'end': (self.point_end[0],
-                        400 - (self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis))
+                        390 - (self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis))
             }
         }
         
@@ -561,9 +559,9 @@ class MainPage:
                     y1 = point1[1] if len(point1) > 1 else 256
                     z1 = point1[2] if len(point1) > 2 else self.Z_for_axis
 
-                    # Adjust height - use a middle position
-                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, y0, 400-z0, plane)
-                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, y1, 400-z1, plane)
+                    # Make needle slightly higher
+                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, y0, 390-z0, plane)
+                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, y1, 390-z1, plane)
 
                 elif plane == "xz":
                     point0 = self.csv_handler.realtime_points[i-1]
@@ -573,9 +571,9 @@ class MainPage:
                     x1 = point1[0] if len(point1) > 0 else 256
                     z1 = point1[2] if len(point1) > 2 else self.Z_for_axis
                     
-                    # Adjust height - use a middle position
-                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, 400-z0, plane)
-                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, 400-z1, plane)
+                    # Make needle slightly higher
+                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, 390-z0, plane)
+                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, 390-z1, plane)
                                 
                 # Draw the line segment
                 self.create_dash_line(panel.canvas, x0_screen, y0_screen, x1_screen, y1_screen, fill="red", tags="realtime")

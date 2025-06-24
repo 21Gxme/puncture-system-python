@@ -57,6 +57,10 @@ class GUIComponents:
         zoom_frame = Frame(self.toolbar)
         zoom_frame.pack(side="right", padx=10)
 
+        # In GUIComponents class, inside init_sidebar (after self.list_view is created)
+        delete_button = Button(self.toolbar, text="Delete File", command=self.main_app.delete_selected_file, bg="salmon")
+        delete_button.pack(side="left")
+
         # All planes zoom controls
         Label(zoom_frame, text="All Planes:").grid(row=0, column=0, padx=2)
         Button(zoom_frame, text="Reset All", command=self.main_app.reset_zoom_all, bg="lightblue").grid(row=0, column=3, padx=1)

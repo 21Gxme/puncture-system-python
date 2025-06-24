@@ -3,6 +3,7 @@ import numpy as np
 from tkinter import  Menu, filedialog, END
 import shutil
 from vispy import scene
+import tkinter.messagebox as messagebox
 
 from data_structures import Vector3D
 from handlers.dicom_handler import DicomHandler
@@ -691,3 +692,27 @@ class MainPage:
         """Handle XZ zoom slider value changes"""
         self.zoom_xz = float(value)
         self.update_images()
+        
+    def delete_selected_file(self):
+        selected_indices = self.gui_components.list_view.curselection()
+        if not selected_indices:
+            messagebox.showwarning("No Selection", "Please select a file to delete.")
+            return
+
+        idx = selected_indices[0]
+        folder_name = self.gui_components.list_view.get(idx)
+        folder_path = os.path.join(os.getcwd(), "dicom-folder", folder_name)
+
+        confirm = messagebox.askyesno("Delete File", f"Are you sure you want to delete '{folder_name}'?")
+        if confirm:
+            try:
+                if os.path.exists(folder_path):
+                    shutil.rmtree(folder_path)
+                self.gui_components.list_view.delete(idx)
+                if folder_path in self.dataList:
+                    self.dataList.remove(folder_path)
+                self.selectedItem = None
+                self.IsSelectedItem = 0
+                messagebox.showinfo("Deleted", f"'{folder_name}' has been deleted.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to delete '{folder_name}': {e}")

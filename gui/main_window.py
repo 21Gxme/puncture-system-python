@@ -713,6 +713,14 @@ class MainPage:
                     self.dataList.remove(folder_path)
                 self.selectedItem = None
                 self.IsSelectedItem = 0
+                self.clear_needle()           # Clear overlays
+                self.clear_all_canvases()     # Clear images and everything
                 messagebox.showinfo("Deleted", f"'{folder_name}' has been deleted.")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to delete '{folder_name}': {e}")
+                
+    def clear_all_canvases(self):
+        """Clear all images and overlays from all panels."""
+        for panel in self.gui_components.panels:
+            panel.canvas.delete("all")
+            panel.image = None

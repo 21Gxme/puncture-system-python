@@ -1,6 +1,6 @@
 from tkinter import Frame, Label, Button, Listbox, Scale, HORIZONTAL, Canvas, Scrollbar, VERTICAL, DoubleVar
-from PIL import Image, ImageTk
-import numpy as np
+from PIL import Image, ImageTk # type: ignore
+import numpy as np # type: ignore
 
 
 class GUIComponents:

@@ -1,8 +1,8 @@
 import os
-import numpy as np
+import numpy as np # type: ignore
 from tkinter import  Menu, filedialog, END
 import shutil
-from vispy import scene
+from vispy import scene # type: ignore
 import tkinter.messagebox as messagebox
 
 from data_structures import Vector3D

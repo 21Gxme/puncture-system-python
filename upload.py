@@ -1,397 +1,390 @@
-# Fixed GUIComponents with better contrast and readability
-gui_components_contrast_fix = '''import os
-import shutil
-from tkinter import Frame, Label, Button, Menu, Listbox, filedialog, Scale, HORIZONTAL, LEFT, END, Canvas, Scrollbar, VERTICAL, RIGHT, BOTTOM, X, Y, BOTH, TOP
-from tkinter.ttk import Notebook
-from PIL import ImageTk, Image
+# สร้างไฟล์ gui_components.py แบบ PyQt5
+gui_components_content = '''from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
+                            QLabel, QPushButton, QSlider, QListWidget, QFrame, 
+                            QGroupBox, QDoubleSpinBox, QSpinBox)
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor
+from PIL import Image, ImageTk
+import numpy as np
 
-class GUIComponents:
-    def __init__(self, root, main_app):
-        self.root = root
+class GUIComponents(QWidget):
+    def __init__(self, main_app):
+        """
+        Initialize GUI Components for PyQt5
+        
+        :param main_app: Reference to the main application window
+        """
+        super().__init__()
         self.main_app = main_app
         self.panels = []
         
-        # Zoom factors for each plane
-        self.zoom_factors = {
-            'xy': 1.0,
-            'yz': 1.0,
-            'xz': 1.0
+        # Initialize drag state variables
+        self.drag_data = {
+            'dragging': False,
+            'start_x': 0,
+            'start_y': 0,
+            'panel_index': -1
         }
         
-        # Pan offsets for each plane
-        self.pan_offsets = {
-            'xy': {'x': 0, 'y': 0},
-            'yz': {'x': 0, 'y': 0},
-            'xz': {'x': 0, 'y': 0}
-        }
-        
-    def init_toolbar(self):
-        """Initialize the toolbar"""
-        self.toolbar = Frame(self.root)
-        self.toolbar.pack(side="top", fill="x")
-
-        menu_button = Button(self.toolbar, text="Menu", command=self.main_app.toggle_sidebar)
-        menu_button.pack(side="left")
-
-        file_button = Button(self.toolbar, text="File", command=self.main_app.show_file_menu)
-        file_button.pack(side="left")
-
-        load_button = Button(self.toolbar, text="Load", command=self.main_app.btnLoadPictures_Click)
-        load_button.pack(side="left")
-
-        start_button = Button(self.toolbar, text="Start Real-Time Route", command=self.main_app.start_realtime_data)
-        start_button.pack(side="left")
-        
-        stop_button = Button(self.toolbar, text="Stop Real-Time Route", command=self.main_app.stop_realtime_data)
-        stop_button.pack(side="left")
+        self.init_sidebar()
 
     def init_sidebar(self):
-        """Initialize the sidebar"""
-        self.sidebar = Frame(self.root)
-        self.sidebar.pack(side="left", fill="y")
-
-        self.list_view = Listbox(self.sidebar)
-        self.list_view.pack(fill="both", expand=True)
-        self.list_view.bind("<<ListboxSelect>>", self.main_app.list_view_item_click)
-
-        self.init_sliders()
-        self.init_zoom_controls()
-
-    def init_sliders(self):
-        """Initialize control sliders"""
-        sliders_frame = Frame(self.sidebar)
-        sliders_frame.pack(fill="both", expand=True)
-
-        self.add_slider(sliders_frame, "X Value", 512, 256, lambda value: self.main_app.slider_changed("X Value", value))
-        self.add_slider(sliders_frame, "Y Value", 512, 256, lambda value: self.main_app.slider_changed("Y Value", value))
-        self.add_slider(sliders_frame, "Z Value", 512, 256, lambda value: self.main_app.slider_changed("Z Value", value))
-        self.add_slider(sliders_frame, "X Rotation", 180, 90, lambda value: self.main_app.slider_changed("X Rotation", value))
-        self.add_slider(sliders_frame, "Y Rotation", 360, 180, lambda value: self.main_app.slider_changed("Y Rotation", value))
-        self.add_slider(sliders_frame, "Z Rotation", 360, 180, lambda value: self.main_app.slider_changed("Z Rotation", value))
-
-    def init_zoom_controls(self):
-        """Initialize zoom control buttons with high contrast"""
-        zoom_frame = Frame(self.sidebar, bg="white")
-        zoom_frame.pack(fill="x", pady=10)
+        """Initialize the sidebar with controls"""
+        # Main sidebar layout
+        sidebar_layout = QVBoxLayout(self)
         
-        # Title with better styling
-        title_label = Label(zoom_frame, text="ZOOM CONTROLS", 
-                          font=("Arial", 11, "bold"), 
-                          bg="white", fg="black")
-        title_label.pack(pady=(5, 8))
+        # File list section
+        self.init_file_list(sidebar_layout)
+        
+        # Control sliders section
+        self.init_sliders(sidebar_layout)
+        
+        # Zoom controls section
+        self.init_zoom_controls(sidebar_layout)
+        
+        # Set fixed width for sidebar
+        self.setFixedWidth(300)
+        self.setStyleSheet("QWidget { background-color: #f0f0f0; }")
+
+    def init_file_list(self, parent_layout):
+        """Initialize file list widget"""
+        # File list group
+        file_group = QGroupBox("DICOM Files")
+        file_layout = QVBoxLayout(file_group)
+        
+        # List widget for DICOM files
+        self.list_view = QListWidget()
+        self.list_view.itemClicked.connect(self.main_app.list_view_item_click)
+        file_layout.addWidget(self.list_view)
+        
+        parent_layout.addWidget(file_group)
+
+    def init_sliders(self, parent_layout):
+        """Initialize control sliders"""
+        sliders_group = QGroupBox("Image Controls")
+        sliders_layout = QVBoxLayout(sliders_group)
+        
+        # X Value slider
+        self.x_slider = self.add_slider(sliders_layout, "X Value", 0, 512, 256, 
+                                       lambda value: self.main_app.slider_changed("X Value", value))
+        
+        # Y Value slider
+        self.y_slider = self.add_slider(sliders_layout, "Y Value", 0, 512, 256,
+                                       lambda value: self.main_app.slider_changed("Y Value", value))
+        
+        # Z Value slider
+        self.z_slider = self.add_slider(sliders_layout, "Z Value", 0, 512, 256,
+                                       lambda value: self.main_app.slider_changed("Z Value", value))
+        
+        # Rotation sliders
+        rotation_group = QGroupBox("3D Rotation")
+        rotation_layout = QVBoxLayout(rotation_group)
+        
+        # X Rotation slider
+        self.x_rot_slider = self.add_slider(rotation_layout, "X Rotation", 0, 180, 90,
+                                           lambda value: self.main_app.slider_changed("X Rotation", value))
+        
+        # Y Rotation slider
+        self.y_rot_slider = self.add_slider(rotation_layout, "Y Rotation", 0, 360, 180,
+                                           lambda value: self.main_app.slider_changed("Y Rotation", value))
+        
+        # Z Rotation slider
+        self.z_rot_slider = self.add_slider(rotation_layout, "Z Rotation", 0, 360, 180,
+                                           lambda value: self.main_app.slider_changed("Z Rotation", value))
+        
+        sliders_layout.addWidget(rotation_group)
+        parent_layout.addWidget(sliders_group)
+
+    def add_slider(self, parent_layout, label_text, minimum, maximum, initial_value, callback):
+        """Add a slider with label to the layout"""
+        # Container widget
+        slider_widget = QWidget()
+        slider_layout = QVBoxLayout(slider_widget)
+        slider_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Label
+        label = QLabel(label_text)
+        slider_layout.addWidget(label)
+        
+        # Horizontal layout for slider and value display
+        slider_row = QHBoxLayout()
+        
+        # Slider
+        slider = QSlider(Qt.Horizontal)
+        slider.setMinimum(minimum)
+        slider.setMaximum(maximum)
+        slider.setValue(initial_value)
+        slider.valueChanged.connect(callback)
+        slider_row.addWidget(slider)
+        
+        # Value display
+        value_label = QLabel(str(initial_value))
+        value_label.setFixedWidth(40)
+        slider.valueChanged.connect(lambda v: value_label.setText(str(v)))
+        slider_row.addWidget(value_label)
+        
+        slider_layout.addLayout(slider_row)
+        parent_layout.addWidget(slider_widget)
+        
+        return slider
+
+    def init_zoom_controls(self, parent_layout):
+        """Initialize zoom control widgets"""
+        zoom_group = QGroupBox("Zoom Controls")
+        zoom_layout = QVBoxLayout(zoom_group)
         
         # XY Plane controls
-        xy_frame = Frame(zoom_frame, bg="white")
-        xy_frame.pack(fill="x", pady=3)
-        Label(xy_frame, text="XY Plane:", width=8, anchor="w", 
-              bg="white", fg="black", font=("Arial", 9)).pack(side="left")
-        Button(xy_frame, text="Zoom+", command=lambda: self.zoom_plane('xy', 1.2), 
-               width=6, font=("Arial", 8), bg="lightblue", fg="black", 
-               relief="raised", bd=2).pack(side="left", padx=1)
-        Button(xy_frame, text="Zoom-", command=lambda: self.zoom_plane('xy', 0.8), 
-               width=6, font=("Arial", 8), bg="lightcoral", fg="black", 
-               relief="raised", bd=2).pack(side="left", padx=1)
-        Button(xy_frame, text="Reset", command=lambda: self.reset_zoom('xy'), 
-               width=5, font=("Arial", 8), bg="lightgray", fg="black", 
-               relief="raised", bd=2).pack(side="left", padx=1)
+        xy_frame = QWidget()
+        xy_layout = QHBoxLayout(xy_frame)
+        xy_layout.addWidget(QLabel("XY Plane:"))
+        
+        self.xy_zoom_spinbox = QDoubleSpinBox()
+        self.xy_zoom_spinbox.setRange(self.main_app.min_zoom, self.main_app.max_zoom)
+        self.xy_zoom_spinbox.setSingleStep(0.1)
+        self.xy_zoom_spinbox.setValue(self.main_app.zoom_xy)
+        self.xy_zoom_spinbox.valueChanged.connect(self.xy_zoom_changed)
+        xy_layout.addWidget(self.xy_zoom_spinbox)
+        
+        xy_reset_btn = QPushButton("Reset")
+        xy_reset_btn.clicked.connect(self.main_app.reset_zoom_xy)
+        xy_layout.addWidget(xy_reset_btn)
+        
+        zoom_layout.addWidget(xy_frame)
         
         # YZ Plane controls
-        yz_frame = Frame(zoom_frame, bg="white")
-        yz_frame.pack(fill="x", pady=3)
-        Label(yz_frame, text="YZ Plane:", width=8, anchor="w", 
-              bg="white", fg="black", font=("Arial", 9)).pack(side="left")
-        Button(yz_frame, text="Zoom+", command=lambda: self.zoom_plane('yz', 1.2), 
-               width=6, font=("Arial", 8), bg="lightblue", fg="black", 
-               relief="raised", bd=2).pack(side="left", padx=1)
-        Button(yz_frame, text="Zoom-", command=lambda: self.zoom_plane('yz', 0.8), 
-               width=6, font=("Arial", 8), bg="lightcoral", fg="black", 
-               relief="raised", bd=2).pack(side="left", padx=1)
-        Button(yz_frame, text="Reset", command=lambda: self.reset_zoom('yz'), 
-               width=5, font=("Arial", 8), bg="lightgray", fg="black", 
-               relief="raised", bd=2).pack(side="left", padx=1)
+        yz_frame = QWidget()
+        yz_layout = QHBoxLayout(yz_frame)
+        yz_layout.addWidget(QLabel("YZ Plane:"))
+        
+        self.yz_zoom_spinbox = QDoubleSpinBox()
+        self.yz_zoom_spinbox.setRange(self.main_app.min_zoom, self.main_app.max_zoom)
+        self.yz_zoom_spinbox.setSingleStep(0.1)
+        self.yz_zoom_spinbox.setValue(self.main_app.zoom_yz)
+        self.yz_zoom_spinbox.valueChanged.connect(self.yz_zoom_changed)
+        yz_layout.addWidget(self.yz_zoom_spinbox)
+        
+        yz_reset_btn = QPushButton("Reset")
+        yz_reset_btn.clicked.connect(self.main_app.reset_zoom_yz)
+        yz_layout.addWidget(yz_reset_btn)
+        
+        zoom_layout.addWidget(yz_frame)
         
         # XZ Plane controls
-        xz_frame = Frame(zoom_frame, bg="white")
-        xz_frame.pack(fill="x", pady=3)
-        Label(xz_frame, text="XZ Plane:", width=8, anchor="w", 
-              bg="white", fg="black", font=("Arial", 9)).pack(side="left")
-        Button(xz_frame, text="Zoom+", command=lambda: self.zoom_plane('xz', 1.2), 
-               width=6, font=("Arial", 8), bg="lightblue", fg="black", 
-               relief="raised", bd=2).pack(side="left", padx=1)
-        Button(xz_frame, text="Zoom-", command=lambda: self.zoom_plane('xz', 0.8), 
-               width=6, font=("Arial", 8), bg="lightcoral", fg="black", 
-               relief="raised", bd=2).pack(side="left", padx=1)
-        Button(xz_frame, text="Reset", command=lambda: self.reset_zoom('xz'), 
-               width=5, font=("Arial", 8), bg="lightgray", fg="black", 
-               relief="raised", bd=2).pack(side="left", padx=1)
+        xz_frame = QWidget()
+        xz_layout = QHBoxLayout(xz_frame)
+        xz_layout.addWidget(QLabel("XZ Plane:"))
         
-        # Separator line
-        separator = Frame(zoom_frame, height=3, bg="navy", relief="sunken")
-        separator.pack(fill="x", pady=10)
+        self.xz_zoom_spinbox = QDoubleSpinBox()
+        self.xz_zoom_spinbox.setRange(self.main_app.min_zoom, self.main_app.max_zoom)
+        self.xz_zoom_spinbox.setSingleStep(0.1)
+        self.xz_zoom_spinbox.setValue(self.main_app.zoom_xz)
+        self.xz_zoom_spinbox.valueChanged.connect(self.xz_zoom_changed)
+        xz_layout.addWidget(self.xz_zoom_spinbox)
         
-        # Global controls label
-        global_label = Label(zoom_frame, text="GLOBAL CONTROLS", 
-                           font=("Arial", 10, "bold"), 
-                           bg="white", fg="navy")
-        global_label.pack(pady=(0, 5))
+        xz_reset_btn = QPushButton("Reset")
+        xz_reset_btn.clicked.connect(self.main_app.reset_zoom_xz)
+        xz_layout.addWidget(xz_reset_btn)
         
-        # All planes controls with HIGH CONTRAST
-        all_frame = Frame(zoom_frame, bg="white")
-        all_frame.pack(fill="x", pady=2)
+        zoom_layout.addWidget(xz_frame)
         
-        # Zoom All In - Green with white text
-        btn1 = Button(all_frame, 
-                     text="ZOOM ALL IN",
-                     command=self.zoom_all_in,
-                     bg="#2E7D32",      # Dark green
-                     fg="white",        # White text
-                     font=("Arial", 10, "bold"),
-                     width=18,
-                     height=2,
-                     relief="raised",
-                     bd=3,
-                     activebackground="#4CAF50",
-                     activeforeground="white")
-        btn1.pack(fill="x", pady=3)
+        # Info display
+        self.zoom_info_label = QLabel("Zoom: XY=1.0 YZ=1.0 XZ=1.0")
+        self.zoom_info_label.setStyleSheet("font-size: 10px; color: #666;")
+        zoom_layout.addWidget(self.zoom_info_label)
         
-        # Zoom All Out - Orange with black text
-        btn2 = Button(all_frame,
-                     text="ZOOM ALL OUT", 
-                     command=self.zoom_all_out,
-                     bg="#F57C00",      # Dark orange
-                     fg="black",        # Black text
-                     font=("Arial", 10, "bold"),
-                     width=18,
-                     height=2,
-                     relief="raised",
-                     bd=3,
-                     activebackground="#FF9800",
-                     activeforeground="black")
-        btn2.pack(fill="x", pady=3)
+        self.pan_info_label = QLabel("Pan: XY=(0,0) YZ=(0,0) XZ=(0,0)")
+        self.pan_info_label.setStyleSheet("font-size: 10px; color: #666;")
+        zoom_layout.addWidget(self.pan_info_label)
         
-        # Reset All - Red with white text
-        btn3 = Button(all_frame,
-                     text="RESET ALL ZOOM",
-                     command=self.reset_all_zoom,
-                     bg="#C62828",      # Dark red
-                     fg="white",        # White text
-                     font=("Arial", 10, "bold"),
-                     width=18,
-                     height=2,
-                     relief="raised",
-                     bd=3,
-                     activebackground="#F44336",
-                     activeforeground="white")
-        btn3.pack(fill="x", pady=3)
-        
-        # Add zoom level display with better styling
-        self.zoom_info_frame = Frame(zoom_frame, bg="white")
-        self.zoom_info_frame.pack(fill="x", pady=8)
-        
-        self.zoom_info_label = Label(self.zoom_info_frame, 
-                                   text="Zoom: XY=1.0x YZ=1.0x XZ=1.0x", 
-                                   font=("Arial", 9, "bold"),
-                                   fg="navy",
-                                   bg="white")
-        self.zoom_info_label.pack()
+        parent_layout.addWidget(zoom_group)
 
-    def update_zoom_display(self):
-        """Update the zoom level display"""
-        zoom_text = f"Zoom: XY={self.zoom_factors['xy']:.1f}x YZ={self.zoom_factors['yz']:.1f}x XZ={self.zoom_factors['xz']:.1f}x"
-        self.zoom_info_label.config(text=zoom_text)
-
-    def zoom_plane(self, plane, factor):
-        """Zoom a specific plane"""
-        self.zoom_factors[plane] *= factor
-        # Limit zoom range
-        self.zoom_factors[plane] = max(0.1, min(self.zoom_factors[plane], 10.0))
+    def xy_zoom_changed(self, value):
+        """Handle XY zoom spinbox changes"""
+        self.main_app.zoom_xy = value
         self.main_app.update_images()
-        self.update_zoom_display()
-        print(f"{plane.upper()} plane zoom: {self.zoom_factors[plane]:.2f}x")
+        self.update_zoom_info()
 
-    def reset_zoom(self, plane):
-        """Reset zoom for a specific plane"""
-        self.zoom_factors[plane] = 1.0
-        self.pan_offsets[plane] = {'x': 0, 'y': 0}
+    def yz_zoom_changed(self, value):
+        """Handle YZ zoom spinbox changes"""
+        self.main_app.zoom_yz = value
         self.main_app.update_images()
-        self.update_zoom_display()
-        print(f"{plane.upper()} plane zoom reset")
+        self.update_zoom_info()
 
-    def zoom_all_in(self):
-        """Zoom in all planes"""
-        for plane in self.zoom_factors:
-            self.zoom_factors[plane] *= 1.2
-            self.zoom_factors[plane] = max(0.1, min(self.zoom_factors[plane], 10.0))
+    def xz_zoom_changed(self, value):
+        """Handle XZ zoom spinbox changes"""
+        self.main_app.zoom_xz = value
         self.main_app.update_images()
-        self.update_zoom_display()
-        print("All planes zoomed in")
+        self.update_zoom_info()
 
-    def zoom_all_out(self):
-        """Zoom out all planes"""
-        for plane in self.zoom_factors:
-            self.zoom_factors[plane] *= 0.8
-            self.zoom_factors[plane] = max(0.1, min(self.zoom_factors[plane], 10.0))
-        self.main_app.update_images()
-        self.update_zoom_display()
-        print("All planes zoomed out")
-
-    def reset_all_zoom(self):
-        """Reset zoom for all planes"""
-        for plane in self.zoom_factors:
-            self.zoom_factors[plane] = 1.0
-            self.pan_offsets[plane] = {'x': 0, 'y': 0}
-        self.main_app.update_images()
-        self.update_zoom_display()
-        print("All planes zoom reset")
-
-    def add_slider(self, parent, label_text, maximum, initial_value, command):
-        """Add a slider with label"""
-        label = Label(parent, text=label_text)
-        label.pack()
-        slider = Scale(parent, from_=0, to=maximum, orient=HORIZONTAL, command=command)
-        slider.set(initial_value)
-        slider.pack()
-
-    def init_main_view(self):
-        """Initialize the main view area"""
-        self.main_view_frame = Frame(self.root)
-        self.main_view_frame.pack(side="right", fill="both", expand=True)
-
-        self.canvas = Canvas(self.main_view_frame)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-
-        self.scrollbar_y = Scrollbar(self.main_view_frame, orient=VERTICAL, command=self.canvas.yview)
-        self.scrollbar_y.grid(row=0, column=1, sticky="ns")
-
-        self.scrollbar_x = Scrollbar(self.main_view_frame, orient=HORIZONTAL, command=self.canvas.xview)
-        self.scrollbar_x.grid(row=1, column=0, sticky="ew")
-
-        self.main_view_frame.grid_rowconfigure(0, weight=1)
-        self.main_view_frame.grid_columnconfigure(0, weight=1)
-
-        self.canvas.configure(xscrollcommand=self.scrollbar_x.set, yscrollcommand=self.scrollbar_y.set)
-        self.canvas.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-
-        self.content_frame = Frame(self.canvas)
-        self.canvas.create_window((0, 0), window=self.content_frame, anchor="nw")
-
-        self.init_panels()
-
-    def init_panels(self):
-        """Initialize image display panels"""
-        self.panel2 = self.create_panel("XY", "magenta", "yellow")
-        self.panel3 = self.create_panel("YZ", "blue", "magenta")
-        self.panel4 = self.create_panel("XZ", "blue", "yellow")
-
-        self.panel2.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
-        self.panel3.grid(row=0, column=1, sticky="nsew", padx=1, pady=1)
-        self.panel4.grid(row=1, column=0, sticky="nsew", padx=1, pady=1)
-
-        self.content_frame.grid_columnconfigure(0, weight=1, minsize=512)
-        self.content_frame.grid_columnconfigure(1, weight=1, minsize=512)
-        self.content_frame.grid_rowconfigure(0, weight=1, minsize=512)
-        self.content_frame.grid_rowconfigure(1, weight=1, minsize=512)
-
-        self.panels.extend([self.panel2, self.panel3, self.panel4])
+    def update_zoom_info(self):
+        """Update zoom level display"""
+        zoom_text = f"Zoom: XY={self.main_app.zoom_xy:.1f} YZ={self.main_app.zoom_yz:.1f} XZ={self.main_app.zoom_xz:.1f}"
         
-        # Add plane identifiers for zoom functionality
-        self.panel2.plane_type = 'xy'
-        self.panel3.plane_type = 'yz'
-        self.panel4.plane_type = 'xz'
+        # Add needle center information if available
+        if hasattr(self.main_app, 'get_needle_center_xy'):
+            needle_center_xy = self.main_app.get_needle_center_xy()
+            if needle_center_xy:
+                needle_text = f"\\nNeedle Center: ({needle_center_xy[0]:.1f}, {needle_center_xy[1]:.1f})"
+                zoom_text += needle_text
         
-        # Bind mouse events for panning (optional enhancement)
-        self.bind_mouse_events()
+        self.zoom_info_label.setText(zoom_text)
+        
+        # Update pan info
+        pan_text = f"Pan: XY=({self.main_app.pan_xy[0]:.0f},{self.main_app.pan_xy[1]:.0f}) YZ=({self.main_app.pan_yz[0]:.0f},{self.main_app.pan_yz[1]:.0f}) XZ=({self.main_app.pan_xz[0]:.0f},{self.main_app.pan_xz[1]:.0f})"
+        self.pan_info_label.setText(pan_text)
 
-    def bind_mouse_events(self):
-        """Bind mouse events for potential panning functionality"""
-        for panel in self.panels:
-            panel.canvas.bind("<Button-1>", lambda e, p=panel: self.start_pan(e, p))
-            panel.canvas.bind("<B1-Motion>", lambda e, p=panel: self.do_pan(e, p))
-            panel.canvas.bind("<ButtonRelease-1>", lambda e, p=panel: self.end_pan(e, p))
-            
-    def start_pan(self, event, panel):
-        """Start panning operation"""
-        panel.canvas.scan_mark(event.x, event.y)
-        
-    def do_pan(self, event, panel):
-        """Perform panning"""
-        panel.canvas.scan_dragto(event.x, event.y, gain=1)
-        
-    def end_pan(self, event, panel):
-        """End panning operation"""
+    def update_zoom_spinboxes(self):
+        """Update zoom spinbox values (called from main app)"""
+        self.xy_zoom_spinbox.setValue(self.main_app.zoom_xy)
+        self.yz_zoom_spinbox.setValue(self.main_app.zoom_yz)
+        self.xz_zoom_spinbox.setValue(self.main_app.zoom_xz)
+
+    def setup_mouse_zoom(self):
+        """Setup mouse wheel zoom for panels (placeholder for future implementation)"""
+        # TODO: Implement mouse wheel zoom for QLabel panels
+        # This would require custom QLabel subclass with wheelEvent override
         pass
 
-    def create_panel(self, label_text, x_color, y_color):
-        """Create a display panel"""
-        panel = Frame(self.content_frame, bg="black", width=512, height=512)
-        panel.pack_propagate(False)
-        panel.canvas = Canvas(panel, bg="black")
-        panel.canvas.pack(fill="both", expand=True, anchor="center")
-        return panel
-        
-    def update_panel_image(self, panel, image_data):
-        """Update image in a panel with zoom support"""
+    def setup_drag_support(self):
+        """Setup drag support for panels (placeholder for future implementation)"""
+        # TODO: Implement drag support for QLabel panels
+        # This would require custom QLabel subclass with mouse event overrides
+        pass
+
+    def create_image_from_array(self, array):
+        """Create QImage from numpy array"""
+        try:
+            # Normalize the array to 0-255 range
+            if array.dtype != np.uint8:
+                array_normalized = ((array - array.min()) / (array.max() - array.min()) * 255).astype(np.uint8)
+            else:
+                array_normalized = array
+            
+            # Create QImage
+            height, width = array_normalized.shape
+            bytes_per_line = width
+            q_image = QImage(array_normalized.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
+            return q_image
+        except Exception as e:
+            print(f"Error creating QImage from array: {e}")
+            return None
+
+    def update_panel_image(self, panel, image_data, zoom=1.0, pan_offset=(0, 0)):
+        """Update image in a panel with zoom and pan support"""
         if image_data is None:
             return
-            
-        # Get zoom factor for this panel
-        plane_type = getattr(panel, 'plane_type', 'xy')
-        zoom_factor = self.zoom_factors.get(plane_type, 1.0)
         
-        # Create and process image
-        image = self.main_app.dicom_handler.make_2d_image(image_data)
+        # Create QImage from numpy array
+        q_image = self.create_image_from_array(image_data)
+        if q_image is None:
+            return
         
-        # Apply zoom
-        if zoom_factor != 1.0:
-            new_width = int(image.width * zoom_factor)
-            new_height = int(image.height * zoom_factor)
-            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        # Apply zoom transformation
+        if zoom != 1.0:
+            new_width = int(q_image.width() * zoom)
+            new_height = int(q_image.height() * zoom)
+            q_image = q_image.scaled(new_width, new_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         
-        photo = ImageTk.PhotoImage(image=image)
+        # Convert to QPixmap
+        pixmap = QPixmap.fromImage(q_image)
         
-        # Clear previous content
-        panel.canvas.delete("axes")
-        panel.canvas.delete("images")
+        # Apply pan offset (this would need custom implementation for proper panning)
+        # For now, just scale to fit the panel
+        scaled_pixmap = pixmap.scaled(panel.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        
+        # Set pixmap to label
+        panel.setPixmap(scaled_pixmap)
+        
+        # Update zoom info display
+        self.update_zoom_info()
 
-        if photo:
-            canvas_width = panel.canvas.winfo_width()
-            canvas_height = panel.canvas.winfo_height()
-            image_width = photo.width()
-            image_height = photo.height()
-            
-            # Center the image
-            x = (canvas_width - image_width) // 2
-            y = (canvas_height - image_height) // 2
-            
-            panel.canvas.create_image(x, y, image=photo, anchor='nw', tags="images")
-            panel.canvas.image = photo
-            
-            # Update scroll region for panning
-            panel.canvas.configure(scrollregion=panel.canvas.bbox("all"))
+    def draw_overlay_on_panel(self, panel, lines, color="green"):
+        """Draw overlay lines on a panel (for needle visualization)"""
+        # Get current pixmap
+        current_pixmap = panel.pixmap()
+        if current_pixmap is None:
+            return
+        
+        # Create a copy to draw on
+        pixmap_copy = current_pixmap.copy()
+        
+        # Create painter
+        painter = QPainter(pixmap_copy)
+        
+        # Set pen for drawing
+        pen = QPen(QColor(color))
+        pen.setWidth(3)
+        painter.setPen(pen)
+        
+        # Draw lines
+        for line in lines:
+            if len(line) >= 4:  # x1, y1, x2, y2
+                painter.drawLine(line[0], line[1], line[2], line[3])
+        
+        painter.end()
+        
+        # Set the modified pixmap back to the panel
+        panel.setPixmap(pixmap_copy)
 
-    def get_zoom_factor(self, plane):
-        """Get zoom factor for a specific plane"""
-        return self.zoom_factors.get(plane, 1.0)
+    def clear_panel_overlays(self, panel):
+        """Clear overlays from a panel (redraw original image)"""
+        # This would require storing the original pixmap separately
+        # For now, this is a placeholder
+        pass
+
+# Custom QLabel class for advanced image display (optional enhancement)
+class ImageDisplayLabel(QLabel):
+    """Custom QLabel with mouse interaction support"""
+    
+    # Signals for mouse events
+    mousePressed = pyqtSignal(int, int)  # x, y coordinates
+    mouseMoved = pyqtSignal(int, int)
+    mouseReleased = pyqtSignal(int, int)
+    wheelScrolled = pyqtSignal(int)  # delta
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(512, 512)
+        self.setStyleSheet("border: 1px solid gray; background-color: black;")
+        self.setAlignment(Qt.AlignCenter)
+        self.setScaledContents(False)
+        
+        # Mouse tracking
+        self.setMouseTracking(True)
+        self.dragging = False
+        self.last_pos = None
+
+    def mousePressEvent(self, event):
+        """Handle mouse press events"""
+        if event.button() == Qt.LeftButton:
+            self.dragging = True
+            self.last_pos = event.pos()
+            self.mousePressed.emit(event.x(), event.y())
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        """Handle mouse move events"""
+        if self.dragging and self.last_pos:
+            self.mouseMoved.emit(event.x(), event.y())
+            self.last_pos = event.pos()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release events"""
+        if event.button() == Qt.LeftButton:
+            self.dragging = False
+            self.last_pos = None
+            self.mouseReleased.emit(event.x(), event.y())
+        super().mouseReleaseEvent(event)
+
+    def wheelEvent(self, event):
+        """Handle mouse wheel events"""
+        self.wheelScrolled.emit(event.angleDelta().y())
+        super().wheelEvent(event)
 '''
 
-# Write the fixed file
-with open('gui/gui_components.py', 'w') as f:
-    f.write(gui_components_contrast_fix)
+# บันทึกไฟล์
+with open('gui_components_pyqt5.py', 'w', encoding='utf-8') as f:
+    f.write(gui_components_content)
 
-print("✅ HIGH CONTRAST fix applied!")
-print("\n🎨 Visual improvements:")
-print("- White background for zoom controls section")
-print("- Dark colors with white/black text for maximum contrast")
-print("- Bold fonts for better readability")
-print("- Raised button relief with borders")
-print("- Active states for button feedback")
-print("\n🔘 Button color scheme:")
-print("- ZOOM ALL IN: Dark Green (#2E7D32) + White text")
-print("- ZOOM ALL OUT: Dark Orange (#F57C00) + Black text") 
-print("- RESET ALL ZOOM: Dark Red (#C62828) + White text")
-print("- Individual buttons: Light colors + Black text")
-print("\n📏 Enhanced styling:")
-print("- Larger font sizes (10pt for global, 8-9pt for individual)")
-print("- 3D raised button effect with borders")
-print("- Better spacing and padding")
-print("- Navy blue accents for headers")
+print("สร้างไฟล์ gui_components_pyqt5.py เรียบร้อยแล้ว!")

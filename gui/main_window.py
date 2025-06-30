@@ -1,9 +1,12 @@
 import os
-import numpy as np # type: ignore
-from tkinter import  Menu, filedialog, END
+import numpy as np
 import shutil
-from vispy import scene # type: ignore
-import tkinter.messagebox as messagebox
+from vispy import scene
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                             QMenuBar, QFileDialog, QMessageBox, QListWidget)
+from PyQt5.QtCore import QTimer, pyqtSignal
+from PyQt5.QtGui import QPixmap, QPainter, QPen
+from PyQt5.QtCore import Qt
 
 from data_structures import Vector3D
 from handlers.dicom_handler import DicomHandler
@@ -11,26 +14,17 @@ from handlers.visualization_handler import VisualizationHandler
 from handlers.csv_handler import CSVHandler
 from gui.gui_components import GUIComponents
 
-class MainPage:
-    def __init__(self, root):
-        """
-        The `__init__` function initializes various handlers, variables, and GUI components for a
-        CT-Guided Puncture Assistance System in Python.
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("CT-Guided Puncture Assistance System")
+        self.setGeometry(100, 100, 800, 600)  # Smaller window size
         
-        :param root: The `root` parameter in the `__init__` method appears to be a reference to the root
-        window or main application window of the GUI application. It is used to set the title, geometry,
-        and initialize various GUI components and handlers within the application
-        """
-        self.root = root
-        self.root.title("CT-Guided Puncture Assistance System")
-        self.root.geometry("1200x800")
-
         # Initialize handlers
         self.dicom_handler = DicomHandler()
         self.visualization_handler = VisualizationHandler()
         self.csv_handler = CSVHandler(self.draw_realtime_line)
-        self.gui_components = GUIComponents(root, self)
-
+        
         # Initialize variables
         self.X_init = 256
         self.Y_init = 256
@@ -78,7 +72,7 @@ class MainPage:
         self.point_start = None
         self.point_end = None
         
-        self.pan_xy = [0, 0]  # [x_offset, y_offset]
+        self.pan_xy = [0, 0]
         self.pan_yz = [0, 0]
         self.pan_xz = [0, 0]
         
@@ -90,11 +84,37 @@ class MainPage:
         }
         
         # Initialize GUI
+        self.gui_components = GUIComponents(self)
+        self.init_ui()
+        
+        self.view = scene.SceneCanvas(keys='interactive', show=False).central_widget.add_view()
+
+    def init_ui(self):
+        """Initialize the user interface"""
+        # Create central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # Create main layout
+        main_layout = QVBoxLayout(central_widget)
+        
+        # Create and add toolbar
         self.gui_components.init_toolbar()
+        main_layout.addWidget(self.gui_components.toolbar)
+        
+        # Create content layout for sidebar and main view
+        content_layout = QHBoxLayout()
+        
+        # Initialize sidebar and main view
         self.gui_components.init_sidebar()
         self.gui_components.init_main_view()
-
-        self.view = scene.SceneCanvas(keys='interactive', show=False).central_widget.add_view()
+        
+        # Add components to content layout
+        content_layout.addWidget(self.gui_components.sidebar)
+        content_layout.addWidget(self.gui_components.main_view_widget, 1)
+        
+        # Add content layout to main layout
+        main_layout.addLayout(content_layout)
 
     def zoom_in_xy(self):
         """Zoom in XY plane centered on needle"""
@@ -202,7 +222,6 @@ class MainPage:
 
     def slider_changed(self, name, value):
         """Handle slider value changes"""
-        # z_ratio = 512 / (self.Z_init)
         if name == "X Value":
             self.Y = int(value)
         elif name == "Y Value":
@@ -235,22 +254,23 @@ class MainPage:
 
     def toggle_sidebar(self):
         """Toggle sidebar visibility"""
-        if self.gui_components.sidebar.winfo_viewable():
-            self.gui_components.sidebar.pack_forget()
+        if self.gui_components.sidebar.isVisible():
+            self.gui_components.sidebar.hide()
         else:
-            self.gui_components.sidebar.pack(side="left", fill="y")
+            self.gui_components.sidebar.show()
 
     def show_file_menu(self):
         """Show file menu"""
-        menu = Menu(self.root, tearoff=0)
-        menu.add_command(label="DICOM Folder", command=self.input_button_click)
-        menu.add_command(label="Puncture Planned Route CSV", command=self.input_plan_coor_data)
-        menu.add_command(label="Puncture Real-Time Route CSV", command=self.select_realtime_csv)
-        menu.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+        from PyQt5.QtWidgets import QMenu
+        menu = QMenu(self)
+        menu.addAction("DICOM Folder", self.input_button_click)
+        menu.addAction("Puncture Planned Route CSV", self.input_plan_coor_data)
+        menu.addAction("Puncture Real-Time Route CSV", self.select_realtime_csv)
+        menu.exec_(self.mapToGlobal(self.pos()))
 
     def select_realtime_csv(self):
         """Select CSV file for real-time monitoring"""
-        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select CSV File", "", "CSV files (*.csv)")
         if file_path:
             self.csv_handler.set_csv_file(file_path)
             self.realtime_line_deleted = False
@@ -258,7 +278,7 @@ class MainPage:
 
     def input_button_click(self):
         """Handle DICOM folder selection"""
-        folder = filedialog.askdirectory(title="Select a Folder")
+        folder = QFileDialog.getExistingDirectory(self, "Select a Folder")
         if folder:
             self.load_folder(folder)
 
@@ -269,13 +289,13 @@ class MainPage:
         if not os.path.exists(destination):
             shutil.copytree(folder, destination)
         self.dataList.append(destination)
-        self.gui_components.list_view.insert(END, folder_name)
+        self.gui_components.list_view.addItem(folder_name)
 
-    def list_view_item_click(self, event):
+    def list_view_item_click(self):
         """Handle list view item selection"""
-        selected_indices = self.gui_components.list_view.curselection()
-        if selected_indices:
-            self.selectedItem = self.gui_components.list_view.get(selected_indices[0])
+        current_item = self.gui_components.list_view.currentItem()
+        if current_item:
+            self.selectedItem = current_item.text()
             self.IsSelectedItem = 1
             self.load_dicom_images(self.selectedItem)
 
@@ -294,11 +314,11 @@ class MainPage:
         """Load and display pictures"""
         if self.IsSelectedItem == 0:
             return
-        for num, pa in enumerate(self.gui_components.panels):
-            self.load_panel_image(pa, num)
+        for num, panel in enumerate(self.gui_components.panels):
+            self.load_panel_image(panel, num)
         self.visualization_handler.visualize_vispy(self.volume3d)
 
-    def load_panel_image(self, pa, num):
+    def load_panel_image(self, panel, num):
         """Load image for a specific panel with zoom support"""
         if self.IsSelectedItem == 0:
             return
@@ -317,15 +337,15 @@ class MainPage:
         # Get zoom for this panel
         zoom = self.get_zoom_for_panel(num)
         
-        self.gui_components.update_panel_image(pa, image_2d, zoom)
+        self.gui_components.update_panel_image(panel, image_2d, zoom)
         
         # Draw axes with zoom consideration
-        if pa == self.gui_components.panel2:
-            self.draw_axes_value_change(pa, "magenta", "yellow", self.Y, self.X)
-        elif pa == self.gui_components.panel3:
-            self.draw_axes_value_change(pa, "blue", "magenta", self.X, self.Z_for_axis)
-        elif pa == self.gui_components.panel4:
-            self.draw_axes_value_change(pa, "blue", "yellow", self.Y, self.Z_for_axis)
+        if panel == self.gui_components.panel2:
+            self.draw_axes_value_change(panel, "magenta", "yellow", self.Y, self.X)
+        elif panel == self.gui_components.panel3:
+            self.draw_axes_value_change(panel, "blue", "magenta", self.X, self.Z_for_axis)
+        elif panel == self.gui_components.panel4:
+            self.draw_axes_value_change(panel, "blue", "yellow", self.Y, self.Z_for_axis)
             
         try:
             if not self.is_clear:
@@ -335,7 +355,8 @@ class MainPage:
 
     def draw_axes_value_change(self, panel, x_color, y_color, x_axis, y_axis):
         """Draw axes on panel with zoom and pan support"""
-        panel.canvas.delete("axes")
+        # Clear previous axes
+        panel.axes_lines = []
         
         # Determine plane type based on panel
         if panel == self.gui_components.panel2:
@@ -355,21 +376,25 @@ class MainPage:
             x_pos, _ = self.get_canvas_coordinates(panel, x_axis, 0, plane_type)
             _, y_pos = self.get_canvas_coordinates(panel, 0, y_axis, plane_type)
         
-        width = panel.canvas.winfo_width()
-        height = panel.canvas.winfo_height()
+        width = panel.width()
+        height = panel.height()
         
-        # Draw axes lines
-        panel.canvas.create_line(0, y_pos, width, y_pos, fill=x_color, tags="axes")
-        panel.canvas.create_line(x_pos, 0, x_pos, height, fill=y_color, tags="axes")
+        # Store axes lines for drawing
+        panel.axes_lines = [
+            {'type': 'horizontal', 'y': y_pos, 'color': x_color},
+            {'type': 'vertical', 'x': x_pos, 'color': y_color}
+        ]
+        
+        panel.update()
 
     def update_images(self):
         """Update all panel images"""
-        for num, pa in enumerate(self.gui_components.panels):
-            self.load_panel_image(pa, num)
+        for num, panel in enumerate(self.gui_components.panels):
+            self.load_panel_image(panel, num)
 
     def get_canvas_coordinates(self, panel, image_x, image_y, plane_type):
-        canvas_width = panel.canvas.winfo_width() or 512
-        canvas_height = panel.canvas.winfo_height() or 512
+        canvas_width = panel.width() or 300
+        canvas_height = panel.height() or 300
 
         if plane_type == 'xy':
             zoom_factor = self.zoom_xy
@@ -436,7 +461,7 @@ class MainPage:
 
     def input_plan_coor_data(self):
         """Load planned coordinates from CSV"""
-        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select CSV File", "", "CSV files (*.csv)")
         if not file_path:
             return
         
@@ -494,30 +519,17 @@ class MainPage:
                 x0_screen, y0_screen = self.get_canvas_coordinates(panel, start_coords[0], start_coords[1], plane)
                 x1_screen, y1_screen = self.get_canvas_coordinates(panel, end_coords[0], end_coords[1], plane)
                 
-                # Clear previous needle lines for this panel
-                panel.canvas.delete("needle")
+                # Store needle line for drawing
+                panel.needle_line = {
+                    'start': (x0_screen, y0_screen),
+                    'end': (x1_screen, y1_screen),
+                    'color': 'green'
+                }
                 
-                # Draw the needle line
-                self.create_dash_line(panel.canvas, x0_screen, y0_screen, x1_screen, y1_screen, fill="green", tags="needle")
+                panel.update()
             
         except (AttributeError, TypeError) as e:
             print(f"Error drawing needle plan: {e}")
-
-    def create_dash_line(self, canvas, x0, y0, x1, y1, fill, tags):
-        """Create dashed line on canvas"""
-        dash_length = 5
-        gap_length = 3
-        line_width = 3
-        total_length = ((x1 - x0)**2 + (y1 - y0)**2) ** 0.5
-        if total_length == 0:
-            return
-        num_dashes = int(total_length // (dash_length + gap_length))
-        for i in range(num_dashes):
-            start_x = x0 + (x1 - x0) * (i * (dash_length + gap_length)) / total_length
-            start_y = y0 + (y1 - y0) * (i * (dash_length + gap_length)) / total_length
-            end_x = start_x + (x1 - x0) * dash_length / total_length
-            end_y = start_y + (y1 - y0) * dash_length / total_length
-            canvas.create_line(start_x, start_y, end_x, end_y, fill=fill, tags=tags, width=line_width)
 
     def start_realtime_data(self):
         """Start real-time data monitoring"""
@@ -540,7 +552,7 @@ class MainPage:
         ]
         
         for panel, plane in panels_and_planes:
-            panel.canvas.delete("realtime")
+            panel.realtime_lines = []
             
             for i in range(1, len(self.csv_handler.realtime_points)):
                 # Get original coordinates
@@ -560,7 +572,6 @@ class MainPage:
                     y1 = point1[1] if len(point1) > 1 else 256
                     z1 = point1[2] if len(point1) > 2 else self.Z_for_axis
 
-                    # Make needle slightly higher
                     x0_screen, y0_screen = self.get_canvas_coordinates(panel, y0, 390-z0, plane)
                     x1_screen, y1_screen = self.get_canvas_coordinates(panel, y1, 390-z1, plane)
 
@@ -572,12 +583,17 @@ class MainPage:
                     x1 = point1[0] if len(point1) > 0 else 256
                     z1 = point1[2] if len(point1) > 2 else self.Z_for_axis
                     
-                    # Make needle slightly higher
                     x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, 390-z0, plane)
                     x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, 390-z1, plane)
                                 
-                # Draw the line segment
-                self.create_dash_line(panel.canvas, x0_screen, y0_screen, x1_screen, y1_screen, fill="red", tags="realtime")
+                # Store the line segment
+                panel.realtime_lines.append({
+                    'start': (x0_screen, y0_screen),
+                    'end': (x1_screen, y1_screen),
+                    'color': 'red'
+                })
+            
+            panel.update()
 
         # Update 3D visualization
         if hasattr(self.visualization_handler, 'update_realtime_line_vispy'):
@@ -589,95 +605,29 @@ class MainPage:
         self.plan_line_deleted = True
         self.realtime_line_deleted = True
         for panel in self.gui_components.panels:
-            panel.canvas.delete("needle")
-            panel.canvas.delete("realtime")
+            panel.needle_line = None
+            panel.realtime_lines = []
+            panel.update()
         self.visualization_handler.clear_lines()
 
     def delete_plan_line(self):
         """Delete planned line"""
         self.plan_line_deleted = True
-        self.gui_components.panel2.canvas.delete("needle")
+        for panel in self.gui_components.panels:
+            panel.needle_line = None
+            panel.update()
         if hasattr(self.visualization_handler, 'dash_line'):
             self.visualization_handler.dash_line.set_data(np.array([]))
 
     def delete_realtime_line(self):
         """Delete real-time line"""
         self.realtime_line_deleted = True
-        self.gui_components.panel2.canvas.delete("realtime")
+        for panel in self.gui_components.panels:
+            panel.realtime_lines = []
+            panel.update()
         if hasattr(self.visualization_handler, 'realtime_line_vispy'):
             self.visualization_handler.realtime_line_vispy.set_data(np.array([]))
-    # Modify the load_panel_image method to include pan support:
-    def load_panel_image(self, pa, num):
-        """Load image for a specific panel with zoom and pan support"""
-        if self.IsSelectedItem == 0:
-            return
-        try:
-            if num == 0:
-                image_2d = self.volume3d[:, :, self.Z]
-            elif num == 1:
-                image_2d = np.flipud(np.rot90(self.volume3d[:, self.Y, :]))
-            elif num == 2:
-                image_2d = np.flipud(np.rot90(self.volume3d[self.X, :, :]))
-            else:
-                image_2d = np.zeros((512, 512), dtype=np.int16)
-        except (IndexError, AttributeError):
-            image_2d = np.zeros((512, 512), dtype=np.int16)
         
-        # Get zoom and pan for this panel
-        zoom = self.get_zoom_for_panel(num)
-        pan_offset = self.get_pan_for_panel(num)
-        
-        self.gui_components.update_panel_image(pa, image_2d, zoom, pan_offset)
-        
-        # Draw axes with zoom and pan consideration
-        if pa == self.gui_components.panel2:
-            self.draw_axes_value_change(pa, "magenta", "yellow", self.Y, self.X)
-        elif pa == self.gui_components.panel3:
-            self.draw_axes_value_change(pa, "blue", "magenta", self.X, self.Z_for_axis)
-        elif pa == self.gui_components.panel4:
-            self.draw_axes_value_change(pa, "blue", "yellow", self.Y, self.Z_for_axis)
-        
-        try:
-            if not self.is_clear:
-                self.draw_needle_plan()
-        except AttributeError:
-            pass
-
-    # Update the get_canvas_coordinates method to include pan offset:
-    def get_canvas_coordinates(self, panel, image_x, image_y, plane_type):
-        """Transform image coordinates to canvas coordinates with proper zoom and pan handling"""
-        # Get canvas dimensions
-        canvas_width = panel.canvas.winfo_width() or 512
-        canvas_height = panel.canvas.winfo_height() or 512
-        
-        # Get current zoom factor and pan offset for the plane
-        if plane_type == 'xy':
-            zoom_factor = self.zoom_xy
-            pan_offset = self.pan_xy
-        elif plane_type == 'yz':
-            zoom_factor = self.zoom_yz
-            pan_offset = self.pan_yz
-        elif plane_type == 'xz':
-            zoom_factor = self.zoom_xz
-            pan_offset = self.pan_xz
-        else:
-            zoom_factor = 1.0
-            pan_offset = [0, 0]
-        
-        # Calculate zoomed image size
-        zoomed_width = 512 * zoom_factor
-        zoomed_height = 512 * zoom_factor
-        
-        # Center the zoomed image in canvas and apply pan offset
-        offset_x = (canvas_width - zoomed_width) / 2 + pan_offset[0]
-        offset_y = (canvas_height - zoomed_height) / 2 + pan_offset[1]
-        
-        # Transform coordinates
-        canvas_x = offset_x + (image_x * zoom_factor)
-        canvas_y = offset_y + (image_y * zoom_factor)
-        
-        return canvas_x, canvas_y
-    
     def zoom_xy_slider_changed(self, value):
         """Handle XY zoom slider value changes"""
         self.zoom_xy = float(value)
@@ -694,33 +644,41 @@ class MainPage:
         self.update_images()
         
     def delete_selected_file(self):
-        selected_indices = self.gui_components.list_view.curselection()
-        if not selected_indices:
-            messagebox.showwarning("No Selection", "Please select a file to delete.")
+        current_item = self.gui_components.list_view.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "No Selection", "Please select a file to delete.")
             return
 
-        idx = selected_indices[0]
-        folder_name = self.gui_components.list_view.get(idx)
+        folder_name = current_item.text()
         folder_path = os.path.join(os.getcwd(), "dicom-folder", folder_name)
 
-        confirm = messagebox.askyesno("Delete File", f"Are you sure you want to delete '{folder_name}'?")
-        if confirm:
+        reply = QMessageBox.question(self, "Delete File", f"Are you sure you want to delete '{folder_name}'?",
+                                   QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        
+        if reply == QMessageBox.Yes:
             try:
                 if os.path.exists(folder_path):
                     shutil.rmtree(folder_path)
-                self.gui_components.list_view.delete(idx)
+                
+                row = self.gui_components.list_view.row(current_item)
+                self.gui_components.list_view.takeItem(row)
+                
                 if folder_path in self.dataList:
                     self.dataList.remove(folder_path)
+                    
                 self.selectedItem = None
                 self.IsSelectedItem = 0
-                self.clear_needle()           # Clear overlays
-                self.clear_all_canvases()     # Clear images and everything
-                messagebox.showinfo("Deleted", f"'{folder_name}' has been deleted.")
+                self.clear_needle()
+                self.clear_all_canvases()
+                QMessageBox.information(self, "Deleted", f"'{folder_name}' has been deleted.")
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to delete '{folder_name}': {e}")
+                QMessageBox.critical(self, "Error", f"Failed to delete '{folder_name}': {e}")
                 
     def clear_all_canvases(self):
         """Clear all images and overlays from all panels."""
         for panel in self.gui_components.panels:
-            panel.canvas.delete("all")
-            panel.image = None
+            panel.image_data = None
+            panel.needle_line = None
+            panel.realtime_lines = []
+            panel.axes_lines = []
+            panel.update()

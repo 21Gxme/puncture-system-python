@@ -1,7 +1,7 @@
-import numpy as np
-from vispy import scene
-from vispy.scene import visuals
-from vispy.visuals.transforms import STTransform
+import numpy as np # type: ignore
+from vispy import scene # type: ignore
+from vispy.scene import visuals # type: ignore
+from vispy.visuals.transforms import STTransform # type: ignore
 
 class VisualizationHandler:
     def __init__(self):

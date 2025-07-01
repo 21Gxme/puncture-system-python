@@ -1,13 +1,11 @@
 import os
-import numpy as np
+import numpy as np # type: ignore
 import shutil
-from vispy import scene
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QMenuBar, QFileDialog, QMessageBox, QListWidget)
-from PyQt5.QtCore import QTimer, pyqtSignal
-from PyQt5.QtGui import QPixmap, QPainter, QPen
-from PyQt5.QtCore import Qt
-
+from vispy import scene # type: ignore
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,  # type: ignore
+                              QFileDialog, QMessageBox)
+from PyQt5.QtWidgets import QMenu # type: ignore
+from PyQt5.QtCore import QTimer # type: ignore
 from data_structures import Vector3D
 from handlers.dicom_handler import DicomHandler
 from handlers.visualization_handler import VisualizationHandler
@@ -18,7 +16,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("CT-Guided Puncture Assistance System")
-        self.setGeometry(100, 100, 800, 600)  # Smaller window size
+        self.setGeometry(100, 100, 800, 600)
         
         # Initialize handlers
         self.dicom_handler = DicomHandler()
@@ -83,6 +81,18 @@ class MainWindow(QMainWindow):
             'xz': {'start': None, 'end': None}
         }
         
+        # Cache for real-time needle coordinates in image space
+        self.realtime_needle_coords = {
+            'xy': [],
+            'yz': [],
+            'xz': []
+        }
+        
+        # Smooth rendering timer for real-time updates
+        self.smooth_render_timer = QTimer()
+        self.smooth_render_timer.timeout.connect(self.smooth_render_update)
+        self.smooth_render_timer.setSingleShot(True)
+        
         # Initialize GUI
         self.gui_components = GUIComponents(self)
         self.init_ui()
@@ -116,55 +126,94 @@ class MainWindow(QMainWindow):
         # Add content layout to main layout
         main_layout.addLayout(content_layout)
 
+    def cache_realtime_coordinates(self):
+        """Cache real-time needle coordinates in image space for smooth rendering"""
+        if not hasattr(self.csv_handler, 'realtime_points') or not self.csv_handler.realtime_points:
+            return
+            
+        # Clear previous cache
+        self.realtime_needle_coords = {'xy': [], 'yz': [], 'xz': []}
+        
+        # Cache coordinates for each plane
+        for point in self.csv_handler.realtime_points:
+            # XY plane coordinates
+            if len(point) >= 2:
+                self.realtime_needle_coords['xy'].append((point[0], point[1]))
+            
+            # YZ plane coordinates  
+            if len(point) >= 3:
+                y_coord = point[1] if len(point) > 1 else 256
+                z_coord = 390 - (point[2] if len(point) > 2 else self.Z_for_axis)
+                self.realtime_needle_coords['yz'].append((y_coord, z_coord))
+            
+            # XZ plane coordinates
+            if len(point) >= 3:
+                x_coord = point[0] if len(point) > 0 else 256
+                z_coord = 390 - (point[2] if len(point) > 2 else self.Z_for_axis)
+                self.realtime_needle_coords['xz'].append((x_coord, z_coord))
+
+    def smooth_render_update(self):
+        """Smooth rendering update for real-time needle"""
+        self.draw_realtime_line_optimized()
+
     def zoom_in_xy(self):
         """Zoom in XY plane centered on needle"""
         if self.zoom_xy < self.max_zoom:
             self.zoom_xy = min(self.zoom_xy + self.zoom_step, self.max_zoom)
-            self.update_images()
+            self.update_images_smooth()
 
     def zoom_out_xy(self):
         """Zoom out XY plane centered on needle"""
         if self.zoom_xy > self.min_zoom:
             self.zoom_xy = max(self.zoom_xy - self.zoom_step, self.min_zoom)
-            self.update_images()
+            self.update_images_smooth()
 
     def zoom_in_yz(self):
         """Zoom in YZ plane centered on needle"""
         if self.zoom_yz < self.max_zoom:
             self.zoom_yz = min(self.zoom_yz + self.zoom_step, self.max_zoom)
-            self.update_images()
+            self.update_images_smooth()
 
     def zoom_out_yz(self):
         """Zoom out YZ plane centered on needle"""
         if self.zoom_yz > self.min_zoom:
             self.zoom_yz = max(self.zoom_yz - self.zoom_step, self.min_zoom)
-            self.update_images()
+            self.update_images_smooth()
 
     def zoom_in_xz(self):
         """Zoom in XZ plane centered on needle"""
         if self.zoom_xz < self.max_zoom:
             self.zoom_xz = min(self.zoom_xz + self.zoom_step, self.max_zoom)
-            self.update_images()
+            self.update_images_smooth()
 
     def zoom_out_xz(self):
         """Zoom out XZ plane centered on needle"""
         if self.zoom_xz > self.min_zoom:
             self.zoom_xz = max(self.zoom_xz - self.zoom_step, self.min_zoom)
-            self.update_images()
+            self.update_images_smooth()
 
     def zoom_in_all(self):
         """Zoom in all planes centered on needle"""
         if self.zoom_all < self.max_zoom:
             self.zoom_all = min(self.zoom_all + self.zoom_step, self.max_zoom)
             self.zoom_xy = self.zoom_yz = self.zoom_xz = self.zoom_all
-            self.update_images()
+            self.update_images_smooth()
 
     def zoom_out_all(self):
         """Zoom out all planes centered on needle"""
         if self.zoom_all > self.min_zoom:
             self.zoom_all = max(self.zoom_all - self.zoom_step, self.min_zoom)
             self.zoom_xy = self.zoom_yz = self.zoom_xz = self.zoom_all
-            self.update_images()
+            self.update_images_smooth()
+
+    def update_images_smooth(self):
+        """Update all panel images with smooth needle rendering"""
+        # Update base images
+        for num, panel in enumerate(self.gui_components.panels):
+            self.load_panel_image(panel, num)
+        
+        # Trigger smooth needle rendering with slight delay to avoid flickering
+        self.smooth_render_timer.start(10)  # 10ms delay for smooth rendering
 
     def get_needle_center_xy(self):
         """Get the center point of the needle in XY plane coordinates"""
@@ -193,22 +242,22 @@ class MainWindow(QMainWindow):
     def reset_zoom_xy(self):
         """Reset XY plane zoom to 1.0"""
         self.zoom_xy = 1.0
-        self.update_images()
+        self.update_images_smooth()
 
     def reset_zoom_yz(self):
         """Reset YZ plane zoom to 1.0"""
         self.zoom_yz = 1.0
-        self.update_images()
+        self.update_images_smooth()
 
     def reset_zoom_xz(self):
         """Reset XZ plane zoom to 1.0"""
         self.zoom_xz = 1.0
-        self.update_images()
+        self.update_images_smooth()
 
     def reset_zoom_all(self):
         """Reset all planes zoom to 1.0"""
         self.zoom_xy = self.zoom_yz = self.zoom_xz = self.zoom_all = 1.0
-        self.update_images()
+        self.update_images_smooth()
 
     def get_zoom_for_panel(self, panel_num):
         """Get zoom factor for specific panel"""
@@ -248,8 +297,8 @@ class MainWindow(QMainWindow):
         elif name == "Z Rotation":
             if hasattr(self.visualization_handler, 'view') and self.visualization_handler.view:
                 self.visualization_handler.view.camera.roll = float(value)
-        self.update_images()
-        self.draw_realtime_line()
+        
+        self.update_images_smooth()
         self.visualization_handler.update_realtime_line_vispy(self.csv_handler.realtime_points, self.realtime_line_deleted)
 
     def toggle_sidebar(self):
@@ -261,7 +310,6 @@ class MainWindow(QMainWindow):
 
     def show_file_menu(self):
         """Show file menu"""
-        from PyQt5.QtWidgets import QMenu
         menu = QMenu(self)
         menu.addAction("DICOM Folder", self.input_button_click)
         menu.addAction("Puncture Planned Route CSV", self.input_plan_coor_data)
@@ -274,6 +322,7 @@ class MainWindow(QMainWindow):
         if file_path:
             self.csv_handler.set_csv_file(file_path)
             self.realtime_line_deleted = False
+            self.cache_realtime_coordinates()  # Cache coordinates for smooth rendering
             print(f"Selected CSV file: {file_path}")
 
     def input_button_click(self):
@@ -388,11 +437,11 @@ class MainWindow(QMainWindow):
         panel.update()
 
     def update_images(self):
-        """Update all panel images"""
-        for num, panel in enumerate(self.gui_components.panels):
-            self.load_panel_image(panel, num)
+        """Update all panel images (legacy method - use update_images_smooth for better performance)"""
+        self.update_images_smooth()
 
     def get_canvas_coordinates(self, panel, image_x, image_y, plane_type):
+        """Get canvas coordinates with optimized calculation"""
         canvas_width = panel.width() or 300
         canvas_height = panel.height() or 300
 
@@ -425,29 +474,29 @@ class MainWindow(QMainWindow):
         self.pan_xy = [0, 0]
         self.pan_yz = [0, 0]
         self.pan_xz = [0, 0]
-        self.update_images()
+        self.update_images_smooth()
 
     def reset_pan_xy(self):
         """Reset XY plane pan"""
         self.pan_xy = [0, 0]
-        self.update_images()
+        self.update_images_smooth()
 
     def reset_pan_yz(self):
         """Reset YZ plane pan"""
         self.pan_yz = [0, 0]
-        self.update_images()
+        self.update_images_smooth()
 
     def reset_pan_xz(self):
         """Reset XZ plane pan"""
         self.pan_xz = [0, 0]
-        self.update_images()
+        self.update_images_smooth()
 
     def update_single_panel(self, panel_num):
+        """Update single panel with smooth rendering"""
         if panel_num < len(self.gui_components.panels):
             self.load_panel_image(self.gui_components.panels[panel_num], panel_num)
-        # Draw new lines
-        self.draw_realtime_line()
-        self.draw_needle_plan()
+        # Trigger smooth needle rendering
+        self.smooth_render_timer.start(5)
 
     def get_pan_for_panel(self, panel_num):
         """Get pan offset for specific panel"""
@@ -540,11 +589,22 @@ class MainWindow(QMainWindow):
         self.csv_handler.stop_realtime_monitoring()
 
     def draw_realtime_line(self):
-        """Draw real-time line with proper coordinate transformation"""
-        if self.realtime_line_deleted or not hasattr(self.csv_handler, 'realtime_points'):
+        """Draw real-time line with caching for smooth rendering"""
+        if self.realtime_line_deleted:
             return
         
-        # Draw on all panels
+        # Cache coordinates first
+        self.cache_realtime_coordinates()
+        
+        # Use optimized rendering
+        self.draw_realtime_line_optimized()
+
+    def draw_realtime_line_optimized(self):
+        """Optimized real-time line drawing with cached coordinates"""
+        if self.realtime_line_deleted or not self.realtime_needle_coords['xy']:
+            return
+        
+        # Draw on all panels using cached coordinates
         panels_and_planes = [
             (self.gui_components.panel2, "xy"),
             (self.gui_components.panel3, "yz"),
@@ -553,57 +613,44 @@ class MainWindow(QMainWindow):
         
         for panel, plane in panels_and_planes:
             panel.realtime_lines = []
+            cached_coords = self.realtime_needle_coords[plane]
             
-            for i in range(1, len(self.csv_handler.realtime_points)):
-                # Get original coordinates
-                if plane == "xy":
-                    x0, y0 = self.csv_handler.realtime_points[i-1][:2]
-                    x1, y1 = self.csv_handler.realtime_points[i][:2]
-                    
-                    # Transform to canvas coordinates
-                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane)
-                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane)
-                    
-                elif plane == "yz":
-                    point0 = self.csv_handler.realtime_points[i-1]
-                    point1 = self.csv_handler.realtime_points[i]
-                    y0 = point0[1] if len(point0) > 1 else 256
-                    z0 = point0[2] if len(point0) > 2 else self.Z_for_axis
-                    y1 = point1[1] if len(point1) > 1 else 256
-                    z1 = point1[2] if len(point1) > 2 else self.Z_for_axis
-
-                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, y0, 390-z0, plane)
-                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, y1, 390-z1, plane)
-
-                elif plane == "xz":
-                    point0 = self.csv_handler.realtime_points[i-1]
-                    point1 = self.csv_handler.realtime_points[i]
-                    x0 = point0[0] if len(point0) > 0 else 256
-                    z0 = point0[2] if len(point0) > 2 else self.Z_for_axis
-                    x1 = point1[0] if len(point1) > 0 else 256
-                    z1 = point1[2] if len(point1) > 2 else self.Z_for_axis
-                    
-                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, 390-z0, plane)
-                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, 390-z1, plane)
-                                
-                # Store the line segment
-                panel.realtime_lines.append({
+            # Batch process line segments for better performance
+            line_segments = []
+            for i in range(1, len(cached_coords)):
+                x0, y0 = cached_coords[i-1]
+                x1, y1 = cached_coords[i]
+                
+                # Transform to canvas coordinates
+                x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane)
+                x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane)
+                
+                line_segments.append({
                     'start': (x0_screen, y0_screen),
                     'end': (x1_screen, y1_screen),
                     'color': 'red'
                 })
             
+            # Store all line segments at once
+            panel.realtime_lines = line_segments
             panel.update()
 
         # Update 3D visualization
         if hasattr(self.visualization_handler, 'update_realtime_line_vispy'):
-            self.visualization_handler.update_realtime_line_vispy(self.csv_handler.realtime_points, self.realtime_line_deleted)
+            self.visualization_handler.update_realtime_line_vispy(
+                self.csv_handler.realtime_points, 
+                self.realtime_line_deleted
+            )
 
     def clear_needle(self):
         """Clear all needle visualizations"""
         self.is_clear = True
         self.plan_line_deleted = True
         self.realtime_line_deleted = True
+        
+        # Clear cached coordinates
+        self.realtime_needle_coords = {'xy': [], 'yz': [], 'xz': []}
+        
         for panel in self.gui_components.panels:
             panel.needle_line = None
             panel.realtime_lines = []
@@ -622,6 +669,10 @@ class MainWindow(QMainWindow):
     def delete_realtime_line(self):
         """Delete real-time line"""
         self.realtime_line_deleted = True
+        
+        # Clear cached coordinates
+        self.realtime_needle_coords = {'xy': [], 'yz': [], 'xz': []}
+        
         for panel in self.gui_components.panels:
             panel.realtime_lines = []
             panel.update()
@@ -631,17 +682,17 @@ class MainWindow(QMainWindow):
     def zoom_xy_slider_changed(self, value):
         """Handle XY zoom slider value changes"""
         self.zoom_xy = float(value)
-        self.update_images()
+        self.update_images_smooth()
 
     def zoom_yz_slider_changed(self, value):
         """Handle YZ zoom slider value changes"""
         self.zoom_yz = float(value)
-        self.update_images()
+        self.update_images_smooth()
 
     def zoom_xz_slider_changed(self, value):
         """Handle XZ zoom slider value changes"""
         self.zoom_xz = float(value)
-        self.update_images()
+        self.update_images_smooth()
         
     def delete_selected_file(self):
         current_item = self.gui_components.list_view.currentItem()

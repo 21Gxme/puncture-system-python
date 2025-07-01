@@ -1,10 +1,9 @@
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
-                             QPushButton, QLabel, QListWidget, QSlider, QFrame,
-                             QScrollArea, QSizePolicy)
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor
-from PIL import Image, ImageQt
-import numpy as np
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,  # type: ignore
+                             QPushButton, QLabel, QListWidget, QSlider)
+from PyQt5.QtCore import Qt # type: ignore
+from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor # type: ignore
+from PIL import Image, ImageQt # type: ignore
+import numpy as np # type: ignore
 
 class ImagePanel(QLabel):
     """Custom widget for displaying medical images with overlays"""
@@ -127,6 +126,8 @@ class GUIComponents(QWidget):
         super().__init__()
         self.main_app = main_app
         self.panels = []
+        # Store slider references for button controls
+        self.sliders = {}
         
     def init_toolbar(self):
         """Initialize the toolbar"""
@@ -203,28 +204,112 @@ class GUIComponents(QWidget):
         # Zoom controls
         self.init_zoom_controls(sidebar_layout)
     
-    def init_sliders(self, parent_layout):  # Removed duplicate self parameter
-        """Initialize control sliders"""
+    def init_sliders(self, parent_layout):
+        """Initialize control sliders with increment/decrement buttons"""
         sliders_frame = QWidget()
         sliders_layout = QVBoxLayout(sliders_frame)
         
-        self.add_slider(sliders_layout, "X Value", 512, 256, 
-                       lambda value: self.main_app.slider_changed("X Value", value))
-        self.add_slider(sliders_layout, "Y Value", 512, 256, 
-                       lambda value: self.main_app.slider_changed("Y Value", value))
-        self.add_slider(sliders_layout, "Z Value", 512, 256, 
-                       lambda value: self.main_app.slider_changed("Z Value", value))
-        self.add_slider(sliders_layout, "X Rotation", 180, 90, 
-                       lambda value: self.main_app.slider_changed("X Rotation", value))
-        self.add_slider(sliders_layout, "Y Rotation", 360, 180, 
-                       lambda value: self.main_app.slider_changed("Y Rotation", value))
-        self.add_slider(sliders_layout, "Z Rotation", 360, 180, 
-                       lambda value: self.main_app.slider_changed("Z Rotation", value))
+        # Add sliders with buttons
+        self.add_slider_with_buttons(sliders_layout, "X Value", 512, 256, 
+                                   lambda value: self.main_app.slider_changed("X Value", value))
+        self.add_slider_with_buttons(sliders_layout, "Y Value", 512, 256, 
+                                   lambda value: self.main_app.slider_changed("Y Value", value))
+        self.add_slider_with_buttons(sliders_layout, "Z Value", 512, 256, 
+                                   lambda value: self.main_app.slider_changed("Z Value", value))
+        self.add_slider_with_buttons(sliders_layout, "X Rotation", 180, 90, 
+                                   lambda value: self.main_app.slider_changed("X Rotation", value))
+        self.add_slider_with_buttons(sliders_layout, "Y Rotation", 360, 180, 
+                                   lambda value: self.main_app.slider_changed("Y Rotation", value))
+        self.add_slider_with_buttons(sliders_layout, "Z Rotation", 360, 180, 
+                                   lambda value: self.main_app.slider_changed("Z Rotation", value))
         
         parent_layout.addWidget(sliders_frame)
     
+    def add_slider_with_buttons(self, parent_layout, label_text, maximum, initial_value, callback):
+        """Add a slider with label and increment/decrement buttons"""
+        # Create container for this slider group
+        slider_group = QWidget()
+        slider_group_layout = QVBoxLayout(slider_group)
+        slider_group_layout.setContentsMargins(0, 0, 0, 5)
+        
+        # Label
+        label = QLabel(label_text)
+        slider_group_layout.addWidget(label)
+        
+        # Container for slider and buttons
+        controls_container = QWidget()
+        controls_layout = QHBoxLayout(controls_container)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Decrement button
+        dec_button = QPushButton("-")
+        dec_button.setFixedSize(25, 25)
+        dec_button.setStyleSheet("font-weight: bold; background-color: #e0e0e0;")
+        controls_layout.addWidget(dec_button)
+        
+        # Slider
+        slider = QSlider(Qt.Horizontal)
+        slider.setRange(0, maximum)
+        slider.setValue(initial_value)
+        slider.valueChanged.connect(callback)
+        controls_layout.addWidget(slider)
+        
+        # Increment button
+        inc_button = QPushButton("+")
+        inc_button.setFixedSize(25, 25)
+        inc_button.setStyleSheet("font-weight: bold; background-color: #e0e0e0;")
+        controls_layout.addWidget(inc_button)
+        
+        # Value display label
+        value_label = QLabel(str(initial_value))
+        value_label.setFixedWidth(40)
+        value_label.setAlignment(Qt.AlignCenter)
+        value_label.setStyleSheet("border: 1px solid #ccc; padding: 2px;")
+        controls_layout.addWidget(value_label)
+        
+        slider_group_layout.addWidget(controls_container)
+        parent_layout.addWidget(slider_group)
+        
+        # Store slider reference
+        self.sliders[label_text] = {
+            'slider': slider,
+            'label': value_label,
+            'callback': callback
+        }
+        
+        # Connect button events
+        dec_button.clicked.connect(lambda: self.decrement_slider(label_text))
+        inc_button.clicked.connect(lambda: self.increment_slider(label_text))
+        
+        # Update value label when slider changes
+        slider.valueChanged.connect(lambda value: value_label.setText(str(value)))
+    
+    def increment_slider(self, slider_name):
+        """Increment slider value by 1"""
+        if slider_name in self.sliders:
+            slider = self.sliders[slider_name]['slider']
+            current_value = slider.value()
+            max_value = slider.maximum()
+            
+            if current_value < max_value:
+                new_value = current_value + 1
+                slider.setValue(new_value)
+                # The valueChanged signal will automatically trigger the callback
+    
+    def decrement_slider(self, slider_name):
+        """Decrement slider value by 1"""
+        if slider_name in self.sliders:
+            slider = self.sliders[slider_name]['slider']
+            current_value = slider.value()
+            min_value = slider.minimum()
+            
+            if current_value > min_value:
+                new_value = current_value - 1
+                slider.setValue(new_value)
+                # The valueChanged signal will automatically trigger the callback
+    
     def add_slider(self, parent_layout, label_text, maximum, initial_value, callback):
-        """Add a slider with label"""
+        """Add a slider with label (legacy method - kept for compatibility)"""
         label = QLabel(label_text)
         parent_layout.addWidget(label)
         

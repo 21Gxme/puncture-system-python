@@ -2,7 +2,7 @@ import os
 import numpy as np # type: ignore
 import shutil
 # === CHANGED ===: QWidget and QVBoxLayout are used for the 3D panel container
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox) 
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox)  # type: ignore
 from PyQt5.QtWidgets import QMenu # type: ignore
 from PyQt5.QtCore import QTimer # type: ignore
 from data_structures import Vector3D

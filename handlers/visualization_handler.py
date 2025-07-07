@@ -17,7 +17,7 @@ class VisualizationHandler:
         self.canvas = scene.SceneCanvas(keys='interactive', show=True)
         self.view = self.canvas.central_widget.add_view()
 
-        new_volume3d = np.flipud(np.rollaxis(volume3d, 2))
+        new_volume3d = np.rollaxis(volume3d, 2)
         self.volume = scene.visuals.Volume(new_volume3d, parent=self.view.scene, threshold=0.225)
 
         self.view.camera = scene.cameras.TurntableCamera(parent=self.view.scene, fov=60, elevation=90, azimuth=180, roll=180)

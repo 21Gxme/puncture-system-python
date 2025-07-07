@@ -4,6 +4,8 @@ from PyQt5.QtCore import Qt # type: ignore
 from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor # type: ignore
 from PIL import Image, ImageQt # type: ignore
 import numpy as np # type: ignore
+# === ADDED ===: Import the handler to be used instead of the old panel class
+from handlers.visualization_handler import VisualizationHandler
 
 class ImagePanel(QLabel):
     """Custom widget for displaying medical images with overlays"""
@@ -95,7 +97,7 @@ class ImagePanel(QLabel):
             dx = event.x() - self.last_pos.x()
             dy = event.y() - self.last_pos.y()
             
-            # Get panel index
+            # Get panel index (adjust for 3D panel)
             panel_index = -1
             if self in self.gui_components.panels:
                 panel_index = self.gui_components.panels.index(self)
@@ -120,6 +122,8 @@ class ImagePanel(QLabel):
         if panel_index >= 0:
             delta = event.angleDelta().y()
             self.gui_components.handle_panel_zoom(panel_index, delta > 0)
+
+# === DELETED ===: The entire VisPy3DPanel class has been removed.
 
 class GUIComponents(QWidget):
     def __init__(self, main_app):
@@ -410,22 +414,37 @@ class GUIComponents(QWidget):
         self.pan_info_label.setText(pan_text)
     
     def init_main_view(self):
-        """Initialize the main view area"""
+        """Initialize the main view area with 3D panel in first position"""
         self.main_view_widget = QWidget()
         main_layout = QGridLayout(self.main_view_widget)
         
-        # Create image panels with reference to self
-        self.panel2 = ImagePanel("XY", self, self)  # XY plane
-        self.panel3 = ImagePanel("YZ", self, self)  # YZ plane  
-        self.panel4 = ImagePanel("XZ", self, self)  # XZ plane
+        # === CHANGED ===: Instantiate the handler and a container for the 3D view
+        # 1. Create an instance of the visualization handler
+        self.panel_3d_handler = VisualizationHandler()
         
-        # Add panels to grid
-        main_layout.addWidget(self.panel2, 0, 0)
-        main_layout.addWidget(self.panel3, 0, 1)
-        main_layout.addWidget(self.panel4, 1, 0)
+        # 2. Create a standard QWidget to act as a container for the VisPy canvas
+        self.panel_3d_container = QWidget()
+        container_layout = QVBoxLayout(self.panel_3d_container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        # Add a placeholder label for better appearance before data is loaded
+        placeholder_label = QLabel("3D View - Load DICOM data")
+        placeholder_label.setAlignment(Qt.AlignCenter)
+        placeholder_label.setStyleSheet("background-color: black; color: white;")
+        container_layout.addWidget(placeholder_label)
+
+        # Create 2D image panels
+        self.panel_xy = ImagePanel("XY", self, self)  # XY plane
+        self.panel_yz = ImagePanel("YZ", self, self)  # YZ plane  
+        self.panel_xz = ImagePanel("XZ", self, self)  # XZ plane
         
-        # Store panels for easy access
-        self.panels = [self.panel2, self.panel3, self.panel4]
+        # Add panels to grid: 3D container in top-left, then XY, YZ, XZ
+        main_layout.addWidget(self.panel_3d_container, 0, 0) # Add the container, not the handler
+        main_layout.addWidget(self.panel_xy, 0, 1)           # XY plane
+        main_layout.addWidget(self.panel_yz, 1, 0)           # YZ plane
+        main_layout.addWidget(self.panel_xz, 1, 1)           # XZ plane
+        
+        # Store panels for easy access (2D panels only)
+        self.panels = [self.panel_xy, self.panel_yz, self.panel_xz]
         
         # Set equal column and row stretches
         main_layout.setColumnStretch(0, 1)
@@ -434,7 +453,7 @@ class GUIComponents(QWidget):
         main_layout.setRowStretch(1, 1)
     
     def handle_panel_drag(self, panel_index, dx, dy):
-        """Handle panel drag for panning"""
+        """Handle panel drag for panning (2D panels only)"""
         if panel_index == 0:  # XY plane
             self.main_app.pan_xy[0] += dx
             self.main_app.pan_xy[1] += dy
@@ -450,7 +469,7 @@ class GUIComponents(QWidget):
         self.update_zoom_info()
     
     def handle_panel_zoom(self, panel_index, zoom_in):
-        """Handle panel zoom with mouse wheel"""
+        """Handle panel zoom with mouse wheel (2D panels only)"""
         if zoom_in:
             if panel_index == 0:
                 self.main_app.zoom_in_xy()

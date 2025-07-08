@@ -9,6 +9,9 @@ from data_structures import Vector3D
 from handlers.dicom_handler import DicomHandler
 from handlers.csv_handler import CSVHandler
 from gui.gui_components import GUIComponents
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QLabel)  # type: ignore
+from PyQt5.QtCore import Qt   # type: ignore
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -586,7 +589,7 @@ class MainWindow(QMainWindow):
         folder_name = current_item.text()
         folder_path = os.path.join(os.getcwd(), "dicom-folder", folder_name)
         reply = QMessageBox.question(self, "Delete File", f"Are you sure you want to delete '{folder_name}'?",
-                                   QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
             try:
                 if os.path.exists(folder_path):
@@ -597,6 +600,7 @@ class MainWindow(QMainWindow):
                     self.dataList.remove(folder_path)
                 self.selectedItem = None
                 self.IsSelectedItem = 0
+                self.volume3d = None  # <-- เพิ่มเข้ามา: ล้างข้อมูล Volume หลักทันที
                 self.clear_needle()
                 self.clear_all_canvases()
                 QMessageBox.information(self, "Deleted", f"'{folder_name}' has been deleted.")
@@ -604,12 +608,38 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Failed to delete '{folder_name}': {e}")
 
     def clear_all_canvases(self):
+        # --- ส่วนที่แก้ไข: เคลียร์ 2D panels ---
         for panel in self.gui_components.panels:
             panel.image_data = None
+            panel.current_pixmap = None  # เคลียร์ pixmap ที่ใช้แสดงผล
             panel.needle_line = None
             panel.realtime_lines = []
             panel.axes_lines = []
-            panel.update()
-        # === CHANGED ===: Calls clear_lines on the handler
+            panel.update() # สั่งให้วาด panel ใหม่ (ตอนนี้จะว่างเปล่า)
+
+        # --- ส่วนที่แก้ไข: เคลียร์ 3D visualization ---
         if hasattr(self.gui_components, 'panel_3d_handler'):
             self.gui_components.panel_3d_handler.clear_lines()
+            # ตรวจสอบและลบ 3D volume ออกจาก scene
+            if hasattr(self.gui_components.panel_3d_handler, 'volume') and self.gui_components.panel_3d_handler.volume is not None:
+                self.gui_components.panel_3d_handler.volume.parent = None
+                self.gui_components.panel_3d_handler.volume = None
+
+        # --- ส่วนที่แก้ไข: คืนค่าหน้าจอ 3D view container ---
+        container = self.gui_components.panel_3d_container
+        if container and container.layout():
+            layout = container.layout()
+            # ลบ widget เก่า (VisPy canvas) ออกจาก layout
+            while layout.count():
+                child = layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+            
+            # เพิ่ม placeholder label กลับเข้าไปใหม่
+            placeholder_label = QLabel("3D View - Load DICOM data")
+            placeholder_label.setAlignment(Qt.AlignCenter)
+            placeholder_label.setStyleSheet("background-color: black; color: white;")
+            layout.addWidget(placeholder_label)
+
+        # ล้างข้อมูล volume หลักในหน่วยความจำ
+        self.volume3d = None

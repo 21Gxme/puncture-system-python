@@ -11,7 +11,7 @@ class VisualizationHandler:
         self.scatter = None
         self.dash_line = None
         self.realtime_line_vispy = None
-        
+
     def visualize_vispy(self, volume3d):
         """Create 3D visualization using VisPy"""
         self.canvas = scene.SceneCanvas(keys='interactive', show=True)
@@ -21,7 +21,7 @@ class VisualizationHandler:
         self.volume = scene.visuals.Volume(new_volume3d, parent=self.view.scene, threshold=0.225)
 
         self.view.camera = scene.cameras.TurntableCamera(parent=self.view.scene, fov=60, elevation=90, azimuth=180, roll=180)
-        
+
         self.view.camera.elevation_range = (0, 180)
         self.view.camera.azimuth_range = (None, None)
 
@@ -31,14 +31,15 @@ class VisualizationHandler:
 
         self.scatter = visuals.Markers()
         self.view.add(self.scatter)
-        
+
         self.dash_line = visuals.Line(color='green', width=3, method='gl', parent=self.view.scene)
         self.realtime_line_vispy = visuals.Line(color='red', width=2, method='gl', parent=self.view.scene)
         self.view.add(self.realtime_line_vispy)
-        
+
     def draw_needle_plan_vispy(self, point_start, point_end, plan_line_deleted):
         """Draw planned needle path in 3D"""
         if plan_line_deleted or not hasattr(self, 'dash_line'):
+            self.dash_line.set_data(np.array([]).reshape(0,3))
             return
         try:
             x0, y0, z0 = point_start
@@ -59,23 +60,34 @@ class VisualizationHandler:
                 points.extend([[start_x, start_y, start_z], [end_x, end_y, end_z]])
 
             self.dash_line.set_data(np.array(points), connect='segments')
-        except AttributeError:
+        except (AttributeError, TypeError, ValueError):
+            self.dash_line.set_data(np.array([]).reshape(0,3))
             pass
-            
+
     def update_realtime_line_vispy(self, realtime_points, realtime_line_deleted):
         """Update real-time line in 3D visualization"""
-        if realtime_line_deleted:
+        if realtime_line_deleted or not hasattr(self, 'realtime_line_vispy'):
+            if hasattr(self, 'realtime_line_vispy'):
+                self.realtime_line_vispy.set_data(np.array([]).reshape(0, 3))
             return
-        if not hasattr(self, 'realtime_line_vispy'):
-            self.realtime_line_vispy = visuals.Line(color='red', width=2, method='gl', parent=self.view.scene)
 
-        if realtime_points:
-            points = np.array(realtime_points)
-            self.realtime_line_vispy.set_data(points, connect='strip')
-            
+        if realtime_points and len(realtime_points) > 0:
+            try:
+                points = np.array(realtime_points)
+                if points.ndim == 2 and points.shape[1] == 3:
+                    self.realtime_line_vispy.set_data(points, connect='strip')
+                else:
+                    self.realtime_line_vispy.set_data(np.array([]).reshape(0, 3))
+            except (ValueError, TypeError):
+                self.realtime_line_vispy.set_data(np.array([]).reshape(0, 3))
+        else:
+            self.realtime_line_vispy.set_data(np.array([]).reshape(0, 3))
+
     def clear_lines(self):
         """Clear all visualization lines"""
+        empty_points_3d = np.array([]).reshape(0, 3)
+
         if hasattr(self, 'dash_line'):
-            self.dash_line.set_data(np.array([]))
+            self.dash_line.set_data(empty_points_3d, connect='segments')
         if hasattr(self, 'realtime_line_vispy'):
-            self.realtime_line_vispy.set_data(np.array([]))
+            self.realtime_line_vispy.set_data(empty_points_3d, connect='strip')

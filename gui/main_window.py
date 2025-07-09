@@ -18,11 +18,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("CT-Guided Puncture Assistance System")
         self.setGeometry(100, 100, 800, 600)
-        
+
         # Initialize handlers
         self.dicom_handler = DicomHandler()
         self.csv_handler = CSVHandler(self.draw_realtime_line)
-        
+
         # Initialize variables
         self.X_init = 256
         self.Y_init = 256
@@ -35,6 +35,15 @@ class MainWindow(QMainWindow):
         self.thetaX = 0
         self.thetaY = 0
         self.thetaZ = 0
+
+        # === REVERTED: Back to Brightness and Contrast attributes ===
+        self.brightness = 0
+        # === CHANGED: Default contrast value updated to match slider's new default ===
+        self.contrast = 2.0 
+
+        # Global min/max for consistent normalization
+        self.global_min = None
+        self.global_max = None
 
         # Initialize zoom factors for each plane
         self.zoom_xy = 1.0
@@ -65,34 +74,34 @@ class MainWindow(QMainWindow):
         self.is_clear = False
         self.plan_line_deleted = False
         self.realtime_line_deleted = False
-        
+
         self.dataList = []
         self.point_start = None
         self.point_end = None
-        
+
         self.pan_xy = [0, 0]
         self.pan_yz = [0, 0]
         self.pan_xz = [0, 0]
-        
+
         # Store original needle coordinates in image space (0-512 range)
         self.original_needle_coords = {
             'xy': {'start': None, 'end': None},
-            'yz': {'start': None, 'end': None}, 
+            'yz': {'start': None, 'end': None},
             'xz': {'start': None, 'end': None}
         }
-        
+
         # Cache for real-time needle coordinates in image space
         self.realtime_needle_coords = {
             'xy': [],
             'yz': [],
             'xz': []
         }
-        
+
         # Smooth rendering timer for real-time updates
         self.smooth_render_timer = QTimer()
         self.smooth_render_timer.timeout.connect(self.smooth_render_update)
         self.smooth_render_timer.setSingleShot(True)
-        
+
         # Initialize GUI
         self.gui_components = GUIComponents(self)
         self.init_ui()
@@ -261,6 +270,16 @@ class MainWindow(QMainWindow):
         # Check if real-time data exists before trying to draw it
         if self.csv_handler.realtime_points:
             self.gui_components.panel_3d_handler.update_realtime_line_vispy(self.csv_handler.realtime_points, self.realtime_line_deleted)
+
+    # === REVERTED: Back to brightness and contrast handlers ===
+    def brightness_changed(self, value):
+        self.brightness = value
+        self.update_images_smooth()
+
+    def contrast_changed(self, value):
+        self.contrast = value / 50.0
+        self.update_images_smooth()
+
     def toggle_sidebar(self):
         if self.gui_components.sidebar.isVisible():
             self.gui_components.sidebar.hide()
@@ -311,26 +330,31 @@ class MainWindow(QMainWindow):
         self.X = img_shape[0] // 2
         self.Y = img_shape[1] // 2
         self.Z = img_shape[2] // 2
+        # === KEPT: Calculate and store global min/max for consistent normalization ===
+        if self.volume3d is not None:
+            self.global_min = self.volume3d.min()
+            self.global_max = self.volume3d.max()
+
 
     def btnLoadPictures_Click(self):
         if self.IsSelectedItem == 0:
             return
         for num, panel in enumerate(self.gui_components.panels):
             self.load_panel_image(panel, num)
-            
+
         # === CHANGED ===: Major change in how the 3D view is created and displayed
         # 1. Call the handler to create the visualization and the canvas
         self.gui_components.panel_3d_handler.visualize_vispy(self.volume3d)
-        
+
         # 2. Get the layout of the container widget
         container_layout = self.gui_components.panel_3d_container.layout()
-        
+
         # 3. Clear any old widgets from the container's layout
         while container_layout.count():
             child = container_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
-                
+
         # 4. Add the newly created VisPy canvas to the container
         if self.gui_components.panel_3d_handler.canvas:
             container_layout.addWidget(self.gui_components.panel_3d_handler.canvas.native)
@@ -350,7 +374,10 @@ class MainWindow(QMainWindow):
         except (IndexError, AttributeError):
             image_2d = np.zeros((512, 512), dtype=np.int16)
         zoom = self.get_zoom_for_panel(num)
-        self.gui_components.update_panel_image(panel, image_2d, zoom)
+        
+        # === REVERTED: Pass brightness and contrast to the update function ===
+        self.gui_components.update_panel_image(panel, image_2d, zoom, self.brightness, self.contrast)
+        
         if panel == self.gui_components.panel_xy:
             self.draw_axes_value_change(panel, "magenta", "yellow", self.Y, self.X)
         elif panel == self.gui_components.panel_yz:
@@ -459,13 +486,13 @@ class MainWindow(QMainWindow):
             },
             'yz': {
                 'start': (self.point_start[1] if len(self.point_start) > 1 else 256,
-                         390 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)), 
+                         390 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)),
                 'end': (self.point_end[1] if len(self.point_end) > 1 else 256,
                        390 - (self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis))
             },
             'xz': {
                 'start': (self.point_start[0],
-                         390 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)), 
+                         390 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)),
                 'end': (self.point_end[0],
                        390 - (self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis))
             }
@@ -634,7 +661,7 @@ class MainWindow(QMainWindow):
                 child = layout.takeAt(0)
                 if child.widget():
                     child.widget().deleteLater()
-            
+
             # เพิ่ม placeholder label กลับเข้าไปใหม่
             placeholder_label = QLabel("3D View - Load DICOM data")
             placeholder_label.setAlignment(Qt.AlignCenter)

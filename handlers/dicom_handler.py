@@ -1,7 +1,7 @@
 import os
-import numpy as np
-import pydicom as dicom
-from PIL import Image
+import numpy as np # type: ignore
+import pydicom as dicom # type: ignore
+from PIL import Image # type: ignore
 
 class DicomHandler:
     def __init__(self):

@@ -239,7 +239,7 @@ class GUIComponents(QWidget):
         self.add_slider_with_buttons(sliders_layout, "Brightness", 200, 100,
                                    lambda value: self.main_app.brightness_changed(value - 100))
         # === CHANGED: Default contrast slider value set to 100 ===
-        self.add_slider_with_buttons(sliders_layout, "Contrast", 200, 100,
+        self.add_slider_with_buttons(sliders_layout, "Contrast", 400, 100,
                                    lambda value: self.main_app.contrast_changed(value))
 
         parent_layout.addWidget(sliders_frame)

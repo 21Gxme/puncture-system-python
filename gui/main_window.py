@@ -1,16 +1,13 @@
 import os
 import numpy as np # type: ignore
 import shutil
-# === CHANGED ===: QWidget and QVBoxLayout are used for the 3D panel container
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox)  # type: ignore
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QLabel)  # type: ignore
 from PyQt5.QtWidgets import QMenu # type: ignore
-from PyQt5.QtCore import QTimer # type: ignore
+from PyQt5.QtCore import QTimer, Qt # type: ignore
 from data_structures import Vector3D
 from handlers.dicom_handler import DicomHandler
 from handlers.csv_handler import CSVHandler
 from gui.gui_components import GUIComponents
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QLabel)  # type: ignore
-from PyQt5.QtCore import Qt   # type: ignore
 
 
 class MainWindow(QMainWindow):
@@ -36,10 +33,8 @@ class MainWindow(QMainWindow):
         self.thetaY = 0
         self.thetaZ = 0
 
-        # === REVERTED: Back to Brightness and Contrast attributes ===
         self.brightness = 0
-        # === CHANGED: Default contrast value updated to match slider's new default ===
-        self.contrast = 2.0 
+        self.contrast = 2.0
 
         # Global min/max for consistent normalization
         self.global_min = None
@@ -83,21 +78,18 @@ class MainWindow(QMainWindow):
         self.pan_yz = [0, 0]
         self.pan_xz = [0, 0]
 
-        # Store original needle coordinates in image space (0-512 range)
         self.original_needle_coords = {
             'xy': {'start': None, 'end': None},
             'yz': {'start': None, 'end': None},
             'xz': {'start': None, 'end': None}
         }
 
-        # Cache for real-time needle coordinates in image space
         self.realtime_needle_coords = {
             'xy': [],
             'yz': [],
             'xz': []
         }
 
-        # Smooth rendering timer for real-time updates
         self.smooth_render_timer = QTimer()
         self.smooth_render_timer.timeout.connect(self.smooth_render_update)
         self.smooth_render_timer.setSingleShot(True)
@@ -230,6 +222,23 @@ class MainWindow(QMainWindow):
         elif panel_num == 2:
             return self.zoom_xz
         return 1.0
+    
+    # === ADDED: This function now correctly resides within the MainWindow class ===
+    def on_plane_selection_changed(self, panel, plane_name):
+        """
+        Handles the event when a user selects a new plane from the dropdown.
+        """
+        # Update the panel's internal plane name
+        panel.plane_name = plane_name
+        # Reload the image for the specific panel that was changed
+        if self.volume3d is not None:
+            try:
+                panel_index = self.gui_components.panels.index(panel)
+                self.load_panel_image(panel, panel_index)
+            except ValueError:
+                # This handles a case where the panel might not be in the list, which shouldn't happen.
+                print(f"Error: Panel not found in the list.")
+
 
     def slider_changed(self, name, value):
         if name == "X Value":
@@ -249,7 +258,6 @@ class MainWindow(QMainWindow):
                 self.Z = -int(int(value) - low_end)
             if self.Z == 0:
                 self.Z = -1
-        # === CHANGED ===: Now interacts with the handler's camera, with a check
         elif name == "X Rotation":
             if hasattr(self.gui_components.panel_3d_handler, 'view') and self.gui_components.panel_3d_handler.view:
                 self.gui_components.panel_3d_handler.view.camera.elevation = float(value)
@@ -262,16 +270,12 @@ class MainWindow(QMainWindow):
 
         self.update_images_smooth()
 
-        # === FIXED ===: Add checks to ensure data exists before drawing
-        # Check if plan data exists before trying to draw it
         if self.point_start and self.point_end:
             self.gui_components.panel_3d_handler.draw_needle_plan_vispy(self.point_start, self.point_end, self.plan_line_deleted)
 
-        # Check if real-time data exists before trying to draw it
         if self.csv_handler.realtime_points:
             self.gui_components.panel_3d_handler.update_realtime_line_vispy(self.csv_handler.realtime_points, self.realtime_line_deleted)
 
-    # === REVERTED: Back to brightness and contrast handlers ===
     def brightness_changed(self, value):
         self.brightness = value
         self.update_images_smooth()
@@ -330,11 +334,9 @@ class MainWindow(QMainWindow):
         self.X = img_shape[0] // 2
         self.Y = img_shape[1] // 2
         self.Z = img_shape[2] // 2
-        # === KEPT: Calculate and store global min/max for consistent normalization ===
         if self.volume3d is not None:
             self.global_min = self.volume3d.min()
             self.global_max = self.volume3d.max()
-
 
     def btnLoadPictures_Click(self):
         if self.IsSelectedItem == 0:
@@ -342,72 +344,65 @@ class MainWindow(QMainWindow):
         for num, panel in enumerate(self.gui_components.panels):
             self.load_panel_image(panel, num)
 
-        # === CHANGED ===: Major change in how the 3D view is created and displayed
-        # 1. Call the handler to create the visualization and the canvas
         self.gui_components.panel_3d_handler.visualize_vispy(self.volume3d)
-
-        # 2. Get the layout of the container widget
         container_layout = self.gui_components.panel_3d_container.layout()
 
-        # 3. Clear any old widgets from the container's layout
         while container_layout.count():
             child = container_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
 
-        # 4. Add the newly created VisPy canvas to the container
         if self.gui_components.panel_3d_handler.canvas:
             container_layout.addWidget(self.gui_components.panel_3d_handler.canvas.native)
 
     def load_panel_image(self, panel, num):
         if self.IsSelectedItem == 0:
             return
+
+        # === Use the panel's specific plane_name attribute ===
+        plane_name = panel.plane_name
+
         try:
-            if num == 0:
+            if plane_name == "XY":
                 image_2d = self.volume3d[:, :, self.Z]
-            elif num == 1:
+            elif plane_name == "YZ":
                 image_2d = np.flipud(np.rot90(self.volume3d[:, self.Y, :]))
-            elif num == 2:
+            elif plane_name == "XZ":
                 image_2d = np.flipud(np.rot90(self.volume3d[self.X, :, :]))
             else:
                 image_2d = np.zeros((512, 512), dtype=np.int16)
         except (IndexError, AttributeError):
             image_2d = np.zeros((512, 512), dtype=np.int16)
-        zoom = self.get_zoom_for_panel(num)
         
-        # === REVERTED: Pass brightness and contrast to the update function ===
+        zoom = self.get_zoom_for_panel(num)
         self.gui_components.update_panel_image(panel, image_2d, zoom, self.brightness, self.contrast)
         
-        if panel == self.gui_components.panel_xy:
+        # === Update axes based on the current plane_name ===
+        if plane_name == "XY":
             self.draw_axes_value_change(panel, "magenta", "yellow", self.Y, self.X)
-        elif panel == self.gui_components.panel_yz:
+        elif plane_name == "YZ":
             self.draw_axes_value_change(panel, "blue", "magenta", self.X, self.Z_for_axis)
-        elif panel == self.gui_components.panel_xz:
+        elif plane_name == "XZ":
             self.draw_axes_value_change(panel, "blue", "yellow", self.Y, self.Z_for_axis)
+            
         try:
             if not self.is_clear:
                 self.draw_needle_plan()
         except AttributeError:
             pass
 
+
     def draw_axes_value_change(self, panel, x_color, y_color, x_axis, y_axis):
         panel.axes_lines = []
-        if panel == self.gui_components.panel_xy:
-            plane_type = 'xy'
-        elif panel == self.gui_components.panel_yz:
-            plane_type = 'yz'
-        elif panel == self.gui_components.panel_xz:
-            plane_type = 'xz'
-        else:
-            return
+        plane_type = panel.plane_name.lower()
+        
         if y_axis == self.Z_for_axis:
             x_pos, _ = self.get_canvas_coordinates(panel, x_axis, 0, plane_type)
             _, y_pos = self.get_canvas_coordinates(panel, 0, y_axis, plane_type)
         else:
             x_pos, _ = self.get_canvas_coordinates(panel, x_axis, 0, plane_type)
             _, y_pos = self.get_canvas_coordinates(panel, 0, y_axis, plane_type)
-        width = panel.width()
-        height = panel.height()
+        
         panel.axes_lines = [
             {'type': 'horizontal', 'y': y_pos, 'color': x_color},
             {'type': 'vertical', 'x': x_pos, 'color': y_color}
@@ -420,18 +415,26 @@ class MainWindow(QMainWindow):
     def get_canvas_coordinates(self, panel, image_x, image_y, plane_type):
         canvas_width = panel.width() or 300
         canvas_height = panel.height() or 300
-        if plane_type == 'xy':
+        
+        # Determine zoom and pan based on the original panel index, not the plane_type
+        try:
+            panel_index = self.gui_components.panels.index(panel)
+        except ValueError:
+            panel_index = -1
+
+        if panel_index == 0:
             zoom_factor = self.zoom_xy
             pan_offset = self.pan_xy
-        elif plane_type == 'yz':
+        elif panel_index == 1:
             zoom_factor = self.zoom_yz
             pan_offset = self.pan_yz
-        elif plane_type == 'xz':
+        elif panel_index == 2:
             zoom_factor = self.zoom_xz
             pan_offset = self.pan_xz
         else:
             zoom_factor = 1.0
             pan_offset = [0, 0]
+
         zoomed_width = 512 * zoom_factor
         zoomed_height = 512 * zoom_factor
         offset_x = (canvas_width - zoomed_width) / 2 + pan_offset[0]
@@ -439,6 +442,7 @@ class MainWindow(QMainWindow):
         canvas_x = offset_x + (image_x * zoom_factor)
         canvas_y = offset_y + (image_y * zoom_factor)
         return canvas_x, canvas_y
+
 
     def reset_pan_all(self):
         self.pan_xy = [0, 0]
@@ -500,32 +504,33 @@ class MainWindow(QMainWindow):
         self.is_clear = False
         self.plan_line_deleted = False
         self.draw_needle_plan()
-        # === CHANGED ===: Calls method on panel_3d_handler with correct arguments
         self.gui_components.panel_3d_handler.draw_needle_plan_vispy(self.point_start, self.point_end, self.plan_line_deleted)
 
     def draw_needle_plan(self):
         if self.plan_line_deleted or not self.original_needle_coords['xy']['start']:
             return
         try:
-            panels_and_planes = [
-                (self.gui_components.panel_xy, "xy"),
-                (self.gui_components.panel_yz, "yz"),
-                (self.gui_components.panel_xz, "xz")
-            ]
-            for panel, plane in panels_and_planes:
-                start_coords = self.original_needle_coords[plane]['start']
-                end_coords = self.original_needle_coords[plane]['end']
+            for panel in self.gui_components.panels:
+                plane_name = panel.plane_name.lower()
+                if plane_name not in self.original_needle_coords:
+                    continue
+
+                start_coords = self.original_needle_coords[plane_name]['start']
+                end_coords = self.original_needle_coords[plane_name]['end']
+
                 if start_coords is None or end_coords is None:
                     continue
-                x0_screen, y0_screen = self.get_canvas_coordinates(panel, start_coords[0], start_coords[1], plane)
-                x1_screen, y1_screen = self.get_canvas_coordinates(panel, end_coords[0], end_coords[1], plane)
+                
+                x0_screen, y0_screen = self.get_canvas_coordinates(panel, start_coords[0], start_coords[1], plane_name)
+                x1_screen, y1_screen = self.get_canvas_coordinates(panel, end_coords[0], end_coords[1], plane_name)
+                
                 panel.needle_line = {
                     'start': (x0_screen, y0_screen),
                     'end': (x1_screen, y1_screen),
                     'color': 'green'
                 }
                 panel.update()
-        except (AttributeError, TypeError) as e:
+        except (AttributeError, TypeError, KeyError) as e:
             print(f"Error drawing needle plan: {e}")
 
     def start_realtime_data(self):
@@ -539,26 +544,26 @@ class MainWindow(QMainWindow):
             return
         self.cache_realtime_coordinates()
         self.draw_realtime_line_optimized()
-        # === CHANGED ===: Calls method on panel_3d_handler with correct arguments
         self.gui_components.panel_3d_handler.update_realtime_line_vispy(self.csv_handler.realtime_points, self.realtime_line_deleted)
 
     def draw_realtime_line_optimized(self):
         if self.realtime_line_deleted or not self.realtime_needle_coords['xy']:
             return
-        panels_and_planes = [
-            (self.gui_components.panel_xy, "xy"),
-            (self.gui_components.panel_yz, "yz"),
-            (self.gui_components.panel_xz, "xz")
-        ]
-        for panel, plane in panels_and_planes:
+        
+        for panel in self.gui_components.panels:
+            plane_name = panel.plane_name.lower()
             panel.realtime_lines = []
-            cached_coords = self.realtime_needle_coords[plane]
+            
+            if plane_name not in self.realtime_needle_coords:
+                continue
+
+            cached_coords = self.realtime_needle_coords[plane_name]
             line_segments = []
             for i in range(1, len(cached_coords)):
                 x0, y0 = cached_coords[i-1]
                 x1, y1 = cached_coords[i]
-                x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane)
-                x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane)
+                x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane_name)
+                x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane_name)
                 line_segments.append({
                     'start': (x0_screen, y0_screen),
                     'end': (x1_screen, y1_screen),
@@ -576,7 +581,6 @@ class MainWindow(QMainWindow):
             panel.needle_line = None
             panel.realtime_lines = []
             panel.update()
-        # === CHANGED ===: Calls clear_lines on the handler
         self.gui_components.panel_3d_handler.clear_lines()
 
     def delete_plan_line(self):
@@ -584,7 +588,6 @@ class MainWindow(QMainWindow):
         for panel in self.gui_components.panels:
             panel.needle_line = None
             panel.update()
-        # === CHANGED ===: The handler's draw method will now do nothing due to the flag
         self.gui_components.panel_3d_handler.draw_needle_plan_vispy(None, None, self.plan_line_deleted)
 
     def delete_realtime_line(self):
@@ -593,7 +596,6 @@ class MainWindow(QMainWindow):
         for panel in self.gui_components.panels:
             panel.realtime_lines = []
             panel.update()
-        # === CHANGED ===: The handler's update method will now do nothing due to the flag
         self.gui_components.panel_3d_handler.update_realtime_line_vispy([], self.realtime_line_deleted)
 
     def zoom_xy_slider_changed(self, value):
@@ -627,7 +629,7 @@ class MainWindow(QMainWindow):
                     self.dataList.remove(folder_path)
                 self.selectedItem = None
                 self.IsSelectedItem = 0
-                self.volume3d = None  # <-- เพิ่มเข้ามา: ล้างข้อมูล Volume หลักทันที
+                self.volume3d = None
                 self.clear_needle()
                 self.clear_all_canvases()
                 QMessageBox.information(self, "Deleted", f"'{folder_name}' has been deleted.")
@@ -635,38 +637,31 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Failed to delete '{folder_name}': {e}")
 
     def clear_all_canvases(self):
-        # --- ส่วนที่แก้ไข: เคลียร์ 2D panels ---
         for panel in self.gui_components.panels:
             panel.image_data = None
-            panel.current_pixmap = None  # เคลียร์ pixmap ที่ใช้แสดงผล
+            panel.current_pixmap = None
             panel.needle_line = None
             panel.realtime_lines = []
             panel.axes_lines = []
-            panel.update() # สั่งให้วาด panel ใหม่ (ตอนนี้จะว่างเปล่า)
+            panel.update()
 
-        # --- ส่วนที่แก้ไข: เคลียร์ 3D visualization ---
         if hasattr(self.gui_components, 'panel_3d_handler'):
             self.gui_components.panel_3d_handler.clear_lines()
-            # ตรวจสอบและลบ 3D volume ออกจาก scene
             if hasattr(self.gui_components.panel_3d_handler, 'volume') and self.gui_components.panel_3d_handler.volume is not None:
                 self.gui_components.panel_3d_handler.volume.parent = None
                 self.gui_components.panel_3d_handler.volume = None
 
-        # --- ส่วนที่แก้ไข: คืนค่าหน้าจอ 3D view container ---
         container = self.gui_components.panel_3d_container
         if container and container.layout():
             layout = container.layout()
-            # ลบ widget เก่า (VisPy canvas) ออกจาก layout
             while layout.count():
                 child = layout.takeAt(0)
                 if child.widget():
                     child.widget().deleteLater()
 
-            # เพิ่ม placeholder label กลับเข้าไปใหม่
             placeholder_label = QLabel("3D View - Load DICOM data")
             placeholder_label.setAlignment(Qt.AlignCenter)
             placeholder_label.setStyleSheet("background-color: black; color: white;")
             layout.addWidget(placeholder_label)
 
-        # ล้างข้อมูล volume หลักในหน่วยความจำ
         self.volume3d = None

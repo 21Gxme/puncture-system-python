@@ -78,6 +78,9 @@ class MainWindow(QMainWindow):
         self.pan_yz = [0, 0]
         self.pan_xz = [0, 0]
 
+        # Panel lock states
+        self.panel_locks = [False, False, False]
+
         self.original_needle_coords = {
             'xy': {'start': None, 'end': None},
             'yz': {'start': None, 'end': None},
@@ -223,22 +226,32 @@ class MainWindow(QMainWindow):
             return self.zoom_xz
         return 1.0
     
-    # === ADDED: This function now correctly resides within the MainWindow class ===
     def on_plane_selection_changed(self, panel, plane_name):
         """
         Handles the event when a user selects a new plane from the dropdown.
         """
-        # Update the panel's internal plane name
         panel.plane_name = plane_name
-        # Reload the image for the specific panel that was changed
         if self.volume3d is not None:
             try:
                 panel_index = self.gui_components.panels.index(panel)
                 self.load_panel_image(panel, panel_index)
             except ValueError:
-                # This handles a case where the panel might not be in the list, which shouldn't happen.
                 print(f"Error: Panel not found in the list.")
 
+    def toggle_panel_lock(self, state, panel, selector):
+        """
+        Handles the lock checkbox state change for a panel.
+        """
+        try:
+            panel_index = self.gui_components.panels.index(panel)
+            is_locked = (state == Qt.Checked)
+            
+            self.panel_locks[panel_index] = is_locked
+            panel.locked = is_locked
+            selector.setEnabled(not is_locked)
+            
+        except ValueError:
+            print(f"Error: Could not find panel to toggle lock state.")
 
     def slider_changed(self, name, value):
         if name == "X Value":
@@ -356,10 +369,14 @@ class MainWindow(QMainWindow):
             container_layout.addWidget(self.gui_components.panel_3d_handler.canvas.native)
 
     def load_panel_image(self, panel, num):
+        # *** KEY CHANGE HERE ***
+        # If the panel is locked, skip updating its image
+        if self.panel_locks[num]:
+            return
+            
         if self.IsSelectedItem == 0:
             return
 
-        # === Use the panel's specific plane_name attribute ===
         plane_name = panel.plane_name
 
         try:
@@ -377,7 +394,6 @@ class MainWindow(QMainWindow):
         zoom = self.get_zoom_for_panel(num)
         self.gui_components.update_panel_image(panel, image_2d, zoom, self.brightness, self.contrast)
         
-        # === Update axes based on the current plane_name ===
         if plane_name == "XY":
             self.draw_axes_value_change(panel, "magenta", "yellow", self.Y, self.X)
         elif plane_name == "YZ":
@@ -416,7 +432,6 @@ class MainWindow(QMainWindow):
         canvas_width = panel.width() or 300
         canvas_height = panel.height() or 300
         
-        # Determine zoom and pan based on the original panel index, not the plane_type
         try:
             panel_index = self.gui_components.panels.index(panel)
         except ValueError:

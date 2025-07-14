@@ -227,9 +227,6 @@ class MainWindow(QMainWindow):
         return 1.0
     
     def on_plane_selection_changed(self, panel, plane_name):
-        """
-        Handles the event when a user selects a new plane from the dropdown.
-        """
         panel.plane_name = plane_name
         if self.volume3d is not None:
             try:
@@ -239,9 +236,6 @@ class MainWindow(QMainWindow):
                 print(f"Error: Panel not found in the list.")
 
     def toggle_panel_lock(self, state, panel, selector):
-        """
-        Handles the lock checkbox state change for a panel.
-        """
         try:
             panel_index = self.gui_components.panels.index(panel)
             is_locked = (state == Qt.Checked)
@@ -281,21 +275,15 @@ class MainWindow(QMainWindow):
             if hasattr(self.gui_components.panel_3d_handler, 'view') and self.gui_components.panel_3d_handler.view:
                 self.gui_components.panel_3d_handler.view.camera.roll = float(value)
 
-        self.update_images_smooth()
-
-        if self.point_start and self.point_end:
-            self.gui_components.panel_3d_handler.draw_needle_plan_vispy(self.point_start, self.point_end, self.plan_line_deleted)
-
-        if self.csv_handler.realtime_points:
-            self.gui_components.panel_3d_handler.update_realtime_line_vispy(self.csv_handler.realtime_points, self.realtime_line_deleted)
+        self.update_images()
 
     def brightness_changed(self, value):
         self.brightness = value
-        self.update_images_smooth()
+        self.update_images()
 
     def contrast_changed(self, value):
         self.contrast = value / 50.0
-        self.update_images_smooth()
+        self.update_images()
 
     def toggle_sidebar(self):
         if self.gui_components.sidebar.isVisible():
@@ -350,12 +338,12 @@ class MainWindow(QMainWindow):
         if self.volume3d is not None:
             self.global_min = self.volume3d.min()
             self.global_max = self.volume3d.max()
+        self.update_images()
 
     def btnLoadPictures_Click(self):
         if self.IsSelectedItem == 0:
             return
-        for num, panel in enumerate(self.gui_components.panels):
-            self.load_panel_image(panel, num)
+        self.update_images()
 
         self.gui_components.panel_3d_handler.visualize_vispy(self.volume3d)
         container_layout = self.gui_components.panel_3d_container.layout()
@@ -369,31 +357,51 @@ class MainWindow(QMainWindow):
             container_layout.addWidget(self.gui_components.panel_3d_handler.canvas.native)
 
     def load_panel_image(self, panel, num):
+        if self.IsSelectedItem == 0 or self.volume3d is None:
+            return
+
+        image_2d = None
+
         # *** KEY CHANGE HERE ***
-        # If the panel is locked, skip updating its image
+        # Decide whether to get a new slice or use the old (frozen) one
         if self.panel_locks[num]:
-            return
-            
-        if self.IsSelectedItem == 0:
-            return
-
-        plane_name = panel.plane_name
-
-        try:
-            if plane_name == "XY":
-                image_2d = self.volume3d[:, :, self.Z]
-            elif plane_name == "YZ":
-                image_2d = np.flipud(np.rot90(self.volume3d[:, self.Y, :]))
-            elif plane_name == "XZ":
-                image_2d = np.flipud(np.rot90(self.volume3d[self.X, :, :]))
+            # If locked, use the currently stored image data for the panel
+            if hasattr(panel, 'image_data') and panel.image_data is not None:
+                image_2d = panel.image_data
             else:
+                # If there's no stored data, get it for the first time
+                plane_name = panel.plane_name
+                try:
+                    if plane_name == "XY":
+                        image_2d = self.volume3d[:, :, self.Z]
+                    elif plane_name == "YZ":
+                        image_2d = np.flipud(np.rot90(self.volume3d[:, self.Y, :]))
+                    elif plane_name == "XZ":
+                        image_2d = np.flipud(np.rot90(self.volume3d[self.X, :, :]))
+                except (IndexError, AttributeError):
+                    image_2d = np.zeros((512, 512), dtype=np.int16)
+        else:
+            # If not locked, get a new slice based on current slider values
+            plane_name = panel.plane_name
+            try:
+                if plane_name == "XY":
+                    image_2d = self.volume3d[:, :, self.Z]
+                elif plane_name == "YZ":
+                    image_2d = np.flipud(np.rot90(self.volume3d[:, self.Y, :]))
+                elif plane_name == "XZ":
+                    image_2d = np.flipud(np.rot90(self.volume3d[self.X, :, :]))
+            except (IndexError, AttributeError):
                 image_2d = np.zeros((512, 512), dtype=np.int16)
-        except (IndexError, AttributeError):
-            image_2d = np.zeros((512, 512), dtype=np.int16)
         
+        # If no valid image data could be determined, exit
+        if image_2d is None:
+            return
+
+        # The rest of the function now just handles rendering
         zoom = self.get_zoom_for_panel(num)
         self.gui_components.update_panel_image(panel, image_2d, zoom, self.brightness, self.contrast)
         
+        plane_name = panel.plane_name
         if plane_name == "XY":
             self.draw_axes_value_change(panel, "magenta", "yellow", self.Y, self.X)
         elif plane_name == "YZ":
@@ -406,7 +414,6 @@ class MainWindow(QMainWindow):
                 self.draw_needle_plan()
         except AttributeError:
             pass
-
 
     def draw_axes_value_change(self, panel, x_color, y_color, x_axis, y_axis):
         panel.axes_lines = []
@@ -426,7 +433,9 @@ class MainWindow(QMainWindow):
         panel.update()
 
     def update_images(self):
-        self.update_images_smooth()
+        # This replaces update_images_smooth to avoid the timer for simplicity
+        for num, panel in enumerate(self.gui_components.panels):
+            self.load_panel_image(panel, num)
 
     def get_canvas_coordinates(self, panel, image_x, image_y, plane_type):
         canvas_width = panel.width() or 300
@@ -458,29 +467,27 @@ class MainWindow(QMainWindow):
         canvas_y = offset_y + (image_y * zoom_factor)
         return canvas_x, canvas_y
 
-
     def reset_pan_all(self):
         self.pan_xy = [0, 0]
         self.pan_yz = [0, 0]
         self.pan_xz = [0, 0]
-        self.update_images_smooth()
+        self.update_images()
 
     def reset_pan_xy(self):
         self.pan_xy = [0, 0]
-        self.update_images_smooth()
+        self.update_images()
 
     def reset_pan_yz(self):
         self.pan_yz = [0, 0]
-        self.update_images_smooth()
+        self.update_images()
 
     def reset_pan_xz(self):
         self.pan_xz = [0, 0]
-        self.update_images_smooth()
+        self.update_images()
 
     def update_single_panel(self, panel_num):
         if panel_num < len(self.gui_components.panels):
             self.load_panel_image(self.gui_components.panels[panel_num], panel_num)
-        self.smooth_render_timer.start(5)
 
     def get_pan_for_panel(self, panel_num):
         if panel_num == 0:
@@ -577,8 +584,8 @@ class MainWindow(QMainWindow):
             for i in range(1, len(cached_coords)):
                 x0, y0 = cached_coords[i-1]
                 x1, y1 = cached_coords[i]
-                x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane_name)
-                x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane_name)
+                x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane_type)
+                x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane_type)
                 line_segments.append({
                     'start': (x0_screen, y0_screen),
                     'end': (x1_screen, y1_screen),
@@ -615,15 +622,15 @@ class MainWindow(QMainWindow):
 
     def zoom_xy_slider_changed(self, value):
         self.zoom_xy = float(value)
-        self.update_images_smooth()
+        self.update_images()
 
     def zoom_yz_slider_changed(self, value):
         self.zoom_yz = float(value)
-        self.update_images_smooth()
+        self.update_images()
 
     def zoom_xz_slider_changed(self, value):
         self.zoom_xz = float(value)
-        self.update_images_smooth()
+        self.update_images()
 
     def delete_selected_file(self):
         current_item = self.gui_components.list_view.currentItem()

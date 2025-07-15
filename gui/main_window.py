@@ -1,7 +1,7 @@
 import os
 import numpy as np # type: ignore
 import shutil
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QLabel)  # type: ignore
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QLabel, QPushButton) # type: ignore
 from PyQt5.QtWidgets import QMenu # type: ignore
 from PyQt5.QtCore import QTimer, Qt # type: ignore
 from data_structures import Vector3D
@@ -235,14 +235,20 @@ class MainWindow(QMainWindow):
             except ValueError:
                 print(f"Error: Panel not found in the list.")
 
-    def toggle_panel_lock(self, state, panel, selector):
+    def toggle_panel_lock(self, is_locked, panel, plane_buttons):
+        """
+        Handles the lock button toggle for a panel.
+        """
         try:
             panel_index = self.gui_components.panels.index(panel)
-            is_locked = (state == Qt.Checked)
             
             self.panel_locks[panel_index] = is_locked
             panel.locked = is_locked
-            selector.setEnabled(not is_locked)
+            
+            # Enable/disable the plane selection buttons
+            if isinstance(plane_buttons, list):
+                for button in plane_buttons:
+                    button.setEnabled(not is_locked)
             
         except ValueError:
             print(f"Error: Could not find panel to toggle lock state.")
@@ -319,14 +325,21 @@ class MainWindow(QMainWindow):
         self.dataList.append(destination)
         self.gui_components.list_view.addItem(folder_name)
 
+    # *** THIS IS THE FIRST FIX ***
     def list_view_item_click(self):
+        """
+        Only sets the selected item name. Does not load data.
+        """
         current_item = self.gui_components.list_view.currentItem()
         if current_item:
             self.selectedItem = current_item.text()
             self.IsSelectedItem = 1
-            self.load_dicom_images(self.selectedItem)
+            # The line that called self.load_dicom_images() is removed.
 
     def load_dicom_images(self, folder_name):
+        """
+        Loads DICOM data from the specified folder into memory.
+        """
         volume3d, img_shape = self.dicom_handler.load_dicom_images(folder_name)
         self.volume3d = volume3d
         self.X_init = img_shape[0]
@@ -338,13 +351,24 @@ class MainWindow(QMainWindow):
         if self.volume3d is not None:
             self.global_min = self.volume3d.min()
             self.global_max = self.volume3d.max()
-        self.update_images()
+        # The call to update_images() is removed from here to prevent premature drawing.
 
+    # *** THIS IS THE SECOND FIX ***
     def btnLoadPictures_Click(self):
-        if self.IsSelectedItem == 0:
+        """
+        Loads the selected DICOM data and then displays it.
+        """
+        if self.IsSelectedItem == 0 or self.selectedItem is None:
+            QMessageBox.warning(self, "No Selection", "Please select a file from the list first.")
             return
+
+        # Step 1: Load the data from the selected file
+        self.load_dicom_images(self.selectedItem)
+
+        # Step 2: Update all 2D panels with the new data
         self.update_images()
 
+        # Step 3: Create or update the 3D visualization
         self.gui_components.panel_3d_handler.visualize_vispy(self.volume3d)
         container_layout = self.gui_components.panel_3d_container.layout()
 
@@ -356,32 +380,16 @@ class MainWindow(QMainWindow):
         if self.gui_components.panel_3d_handler.canvas:
             container_layout.addWidget(self.gui_components.panel_3d_handler.canvas.native)
 
+
     def load_panel_image(self, panel, num):
         if self.IsSelectedItem == 0 or self.volume3d is None:
             return
 
         image_2d = None
-
-        # *** KEY CHANGE HERE ***
-        # Decide whether to get a new slice or use the old (frozen) one
-        if self.panel_locks[num]:
-            # If locked, use the currently stored image data for the panel
-            if hasattr(panel, 'image_data') and panel.image_data is not None:
-                image_2d = panel.image_data
-            else:
-                # If there's no stored data, get it for the first time
-                plane_name = panel.plane_name
-                try:
-                    if plane_name == "XY":
-                        image_2d = self.volume3d[:, :, self.Z]
-                    elif plane_name == "YZ":
-                        image_2d = np.flipud(np.rot90(self.volume3d[:, self.Y, :]))
-                    elif plane_name == "XZ":
-                        image_2d = np.flipud(np.rot90(self.volume3d[self.X, :, :]))
-                except (IndexError, AttributeError):
-                    image_2d = np.zeros((512, 512), dtype=np.int16)
+        
+        if self.panel_locks[num] and hasattr(panel, 'image_data') and panel.image_data is not None:
+            image_2d = panel.image_data
         else:
-            # If not locked, get a new slice based on current slider values
             plane_name = panel.plane_name
             try:
                 if plane_name == "XY":
@@ -393,11 +401,9 @@ class MainWindow(QMainWindow):
             except (IndexError, AttributeError):
                 image_2d = np.zeros((512, 512), dtype=np.int16)
         
-        # If no valid image data could be determined, exit
         if image_2d is None:
             return
 
-        # The rest of the function now just handles rendering
         zoom = self.get_zoom_for_panel(num)
         self.gui_components.update_panel_image(panel, image_2d, zoom, self.brightness, self.contrast)
         
@@ -412,6 +418,7 @@ class MainWindow(QMainWindow):
         try:
             if not self.is_clear:
                 self.draw_needle_plan()
+
         except AttributeError:
             pass
 
@@ -433,7 +440,6 @@ class MainWindow(QMainWindow):
         panel.update()
 
     def update_images(self):
-        # This replaces update_images_smooth to avoid the timer for simplicity
         for num, panel in enumerate(self.gui_components.panels):
             self.load_panel_image(panel, num)
 
@@ -584,8 +590,8 @@ class MainWindow(QMainWindow):
             for i in range(1, len(cached_coords)):
                 x0, y0 = cached_coords[i-1]
                 x1, y1 = cached_coords[i]
-                x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane_type)
-                x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane_type)
+                x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane_name)
+                x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane_name)
                 line_segments.append({
                     'start': (x0_screen, y0_screen),
                     'end': (x1_screen, y1_screen),

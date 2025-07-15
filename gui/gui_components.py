@@ -1,9 +1,9 @@
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, # type: ignore
                              QPushButton, QLabel, QListWidget, QSlider, QScrollArea, QComboBox, QCheckBox) # Added QCheckBox
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor
-from PIL import Image, ImageQt
-import numpy as np
+from PyQt5.QtCore import Qt  # type: ignore
+from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor # type: ignore
+from PIL import Image, ImageQt # type: ignore
+import numpy as np # type: ignore
 from handlers.visualization_handler import VisualizationHandler
 
 class ImagePanel(QLabel):
@@ -82,16 +82,12 @@ class ImagePanel(QLabel):
             painter.drawLine(int(start[0]), int(start[1]), int(end[0]), int(end[1]))
 
     def mousePressEvent(self, event):
-        if self.locked:
-            return
         if event.button() == Qt.LeftButton:
             self.dragging = True
             self.last_pos = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
 
     def mouseMoveEvent(self, event):
-        if self.locked:
-            return
         if self.dragging and self.last_pos:
             dx = event.x() - self.last_pos.x()
             dy = event.y() - self.last_pos.y()
@@ -106,15 +102,11 @@ class ImagePanel(QLabel):
             self.last_pos = event.pos()
 
     def mouseReleaseEvent(self, event):
-        if self.locked:
-            return
         if event.button() == Qt.LeftButton:
             self.dragging = False
             self.setCursor(Qt.ArrowCursor)
 
     def wheelEvent(self, event):
-        if self.locked:
-            return
         panel_index = -1
         if self in self.gui_components.panels:
             panel_index = self.gui_components.panels.index(self)
@@ -370,6 +362,7 @@ class GUIComponents(QWidget):
         def create_panel_with_selector(initial_plane, panel_index):
             panel = ImagePanel(initial_plane, self, self)
             
+            # Control widget container
             controls_widget = QWidget()
             controls_layout = QHBoxLayout(controls_widget)
             controls_layout.setContentsMargins(0, 0, 0, 0)
@@ -390,12 +383,13 @@ class GUIComponents(QWidget):
             controls_layout.addStretch()
             controls_layout.addWidget(lock_checkbox)
             
+            # Main container for controls and panel
             container = QWidget()
             layout = QVBoxLayout(container)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(2)
             layout.addWidget(controls_widget)
-            layout.addWidget(panel, 1) 
+            layout.addWidget(panel, 1) # Give the panel more stretch factor
             return container, panel, selector, lock_checkbox
 
         # Create the three 2D panels
@@ -403,23 +397,23 @@ class GUIComponents(QWidget):
         container2, self.panel2, self.selector2, self.lock2 = create_panel_with_selector("YZ", 1)
         container3, self.panel3, self.selector3, self.lock3 = create_panel_with_selector("XZ", 2)
 
+        # Store panels for easy access
         self.panels = [self.panel1, self.panel2, self.panel3]
 
+        # Add panels to the grid
         main_layout.addWidget(self.panel_3d_container, 0, 0)
         main_layout.addWidget(container1, 0, 1)
         main_layout.addWidget(container2, 1, 0)
         main_layout.addWidget(container3, 1, 1)
 
+        # Set column and row stretches to make them resize equally
         main_layout.setColumnStretch(0, 1)
         main_layout.setColumnStretch(1, 1)
         main_layout.setRowStretch(0, 1)
         main_layout.setRowStretch(1, 1)
 
     def handle_panel_drag(self, panel_index, dx, dy):
-        """Handle panel drag for panning (2D panels only)"""
-        if self.main_app.panel_locks[panel_index]:
-            return
-            
+        """Handle panel drag for panning (2D panels only)"""            
         if panel_index == 0:
             self.main_app.pan_xy[0] += dx
             self.main_app.pan_xy[1] += dy
@@ -435,9 +429,6 @@ class GUIComponents(QWidget):
 
     def handle_panel_zoom(self, panel_index, zoom_in):
         """Handle panel zoom with mouse wheel (2D panels only)"""
-        if self.main_app.panel_locks[panel_index]:
-            return
-
         if zoom_in:
             if panel_index == 0: self.main_app.zoom_in_xy()
             elif panel_index == 1: self.main_app.zoom_in_yz()

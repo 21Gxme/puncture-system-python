@@ -117,18 +117,10 @@ class MainWindow(QMainWindow):
     def cache_realtime_coordinates(self):
         if not hasattr(self.csv_handler, 'realtime_points') or not self.csv_handler.realtime_points:
             return
-        self.realtime_needle_coords = {'xy': [], 'yz': [], 'xz': []}
+        self.realtime_needle_coords = {'xy': []}
         for point in self.csv_handler.realtime_points:
             if len(point) >= 2:
                 self.realtime_needle_coords['xy'].append((point[0], point[1]))
-            if len(point) >= 3:
-                y_coord = point[1] if len(point) > 1 else 256
-                z_coord = 390 - (point[2] if len(point) > 2 else self.Z_for_axis)
-                self.realtime_needle_coords['yz'].append((y_coord, z_coord))
-            if len(point) >= 3:
-                x_coord = point[0] if len(point) > 0 else 256
-                z_coord = 390 - (point[2] if len(point) > 2 else self.Z_for_axis)
-                self.realtime_needle_coords['xz'].append((x_coord, z_coord))
 
     def smooth_render_update(self):
         self.draw_realtime_line_optimized()
@@ -515,18 +507,6 @@ class MainWindow(QMainWindow):
             'xy': {
                 'start': (self.point_start[0], self.point_start[1]),
                 'end': (self.point_end[0], self.point_end[1])
-            },
-            'yz': {
-                'start': (self.point_start[1] if len(self.point_start) > 1 else 256,
-                         390 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)),
-                'end': (self.point_end[1] if len(self.point_end) > 1 else 256,
-                       390 - (self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis))
-            },
-            'xz': {
-                'start': (self.point_start[0],
-                         390 - (self.point_start[2] if len(self.point_start) > 2 else self.Z_for_axis)),
-                'end': (self.point_end[0],
-                       390 - (self.point_end[2] if len(self.point_end) > 2 else self.Z_for_axis))
             }
         }
         self.is_clear = False
@@ -535,29 +515,28 @@ class MainWindow(QMainWindow):
         self.gui_components.panel_3d_handler.draw_needle_plan_vispy(self.point_start, self.point_end, self.plan_line_deleted)
 
     def draw_needle_plan(self):
-        if self.plan_line_deleted or not self.original_needle_coords['xy']['start']:
+        if self.plan_line_deleted or not self.original_needle_coords.get('xy') or not self.original_needle_coords['xy'].get('start'):
             return
         try:
+            # วนหา panel ที่เป็น 'xy' โดยเฉพาะ
             for panel in self.gui_components.panels:
-                plane_name = panel.plane_name.lower()
-                if plane_name not in self.original_needle_coords:
-                    continue
+                if panel.plane_name.lower() == 'xy':
+                    start_coords = self.original_needle_coords['xy']['start']
+                    end_coords = self.original_needle_coords['xy']['end']
 
-                start_coords = self.original_needle_coords[plane_name]['start']
-                end_coords = self.original_needle_coords[plane_name]['end']
-
-                if start_coords is None or end_coords is None:
-                    continue
-                
-                x0_screen, y0_screen = self.get_canvas_coordinates(panel, start_coords[0], start_coords[1], plane_name)
-                x1_screen, y1_screen = self.get_canvas_coordinates(panel, end_coords[0], end_coords[1], plane_name)
-                
-                panel.needle_line = {
-                    'start': (x0_screen, y0_screen),
-                    'end': (x1_screen, y1_screen),
-                    'color': 'green'
-                }
-                panel.update()
+                    if start_coords is None or end_coords is None:
+                        continue
+                    
+                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, start_coords[0], start_coords[1], 'xy')
+                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, end_coords[0], end_coords[1], 'xy')
+                    
+                    panel.needle_line = {
+                        'start': (x0_screen, y0_screen),
+                        'end': (x1_screen, y1_screen),
+                        'color': 'green'
+                    }
+                    panel.update()
+                    break
         except (AttributeError, TypeError, KeyError) as e:
             print(f"Error drawing needle plan: {e}")
 
@@ -575,30 +554,28 @@ class MainWindow(QMainWindow):
         self.gui_components.panel_3d_handler.update_realtime_line_vispy(self.csv_handler.realtime_points, self.realtime_line_deleted)
 
     def draw_realtime_line_optimized(self):
-        if self.realtime_line_deleted or not self.realtime_needle_coords['xy']:
+        if self.realtime_line_deleted or not self.realtime_needle_coords.get('xy'):
             return
         
         for panel in self.gui_components.panels:
-            plane_name = panel.plane_name.lower()
-            panel.realtime_lines = []
-            
-            if plane_name not in self.realtime_needle_coords:
-                continue
-
-            cached_coords = self.realtime_needle_coords[plane_name]
-            line_segments = []
-            for i in range(1, len(cached_coords)):
-                x0, y0 = cached_coords[i-1]
-                x1, y1 = cached_coords[i]
-                x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, plane_name)
-                x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, plane_name)
-                line_segments.append({
-                    'start': (x0_screen, y0_screen),
-                    'end': (x1_screen, y1_screen),
-                    'color': 'red'
-                })
-            panel.realtime_lines = line_segments
-            panel.update()
+            if panel.plane_name.lower() == 'xy':
+                panel.realtime_lines = []
+                
+                cached_coords = self.realtime_needle_coords['xy']
+                line_segments = []
+                for i in range(1, len(cached_coords)):
+                    x0, y0 = cached_coords[i-1]
+                    x1, y1 = cached_coords[i]
+                    x0_screen, y0_screen = self.get_canvas_coordinates(panel, x0, y0, 'xy')
+                    x1_screen, y1_screen = self.get_canvas_coordinates(panel, x1, y1, 'xy')
+                    line_segments.append({
+                        'start': (x0_screen, y0_screen),
+                        'end': (x1_screen, y1_screen),
+                        'color': 'red'
+                    })
+                panel.realtime_lines = line_segments
+                panel.update()
+                break
 
     def clear_needle(self):
         self.is_clear = True

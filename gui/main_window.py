@@ -326,12 +326,8 @@ class MainWindow(QMainWindow):
         if current_item:
             self.selectedItem = current_item.text()
             self.IsSelectedItem = 1
-            # The line that called self.load_dicom_images() is removed.
 
     def load_dicom_images(self, folder_name):
-        """
-        Loads DICOM data from the specified folder into memory.
-        """
         volume3d, img_shape = self.dicom_handler.load_dicom_images(folder_name)
         self.volume3d = volume3d
         self.X_init = img_shape[0]
@@ -343,24 +339,16 @@ class MainWindow(QMainWindow):
         if self.volume3d is not None:
             self.global_min = self.volume3d.min()
             self.global_max = self.volume3d.max()
-        # The call to update_images() is removed from here to prevent premature drawing.
 
-    # *** THIS IS THE SECOND FIX ***
     def btnLoadPictures_Click(self):
-        """
-        Loads the selected DICOM data and then displays it.
-        """
         if self.IsSelectedItem == 0 or self.selectedItem is None:
             QMessageBox.warning(self, "No Selection", "Please select a file from the list first.")
             return
 
-        # Step 1: Load the data from the selected file
         self.load_dicom_images(self.selectedItem)
 
-        # Step 2: Update all 2D panels with the new data
         self.update_images()
 
-        # Step 3: Create or update the 3D visualization
         self.gui_components.panel_3d_handler.visualize_vispy(self.volume3d)
         container_layout = self.gui_components.panel_3d_container.layout()
 
@@ -376,7 +364,6 @@ class MainWindow(QMainWindow):
     def load_panel_image(self, panel, num):
         if self.IsSelectedItem == 0 or self.volume3d is None:
             return
-
         image_2d = None
         
         if self.panel_locks[num] and hasattr(panel, 'image_data') and panel.image_data is not None:
@@ -518,7 +505,6 @@ class MainWindow(QMainWindow):
         if self.plan_line_deleted or not self.original_needle_coords.get('xy') or not self.original_needle_coords['xy'].get('start'):
             return
         try:
-            # วนหา panel ที่เป็น 'xy' โดยเฉพาะ
             for panel in self.gui_components.panels:
                 if panel.plane_name.lower() == 'xy':
                     start_coords = self.original_needle_coords['xy']['start']

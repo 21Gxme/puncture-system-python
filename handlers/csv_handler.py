@@ -51,7 +51,7 @@ class CSVHandler:
                         self.realtime_points.append([x, y, z])
                         self.callback_func()
 
-                time.sleep(1)  # Check for new data every second
+                # time.sleep(1)
             except Exception as e:
                 print(f"Error reading CSV file: {e}")
                 break

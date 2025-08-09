@@ -7,11 +7,10 @@
 
 1. Open terminal/command prompt
 2. Clone the application from Github
-3.
 
 ``` bash
 
-git clone https://github.com/natekrth/puncture-system-python.git
+git clone https://github.com/21Gxme/puncture-system-python.git
 ```
 
 ### Creating Python virtualenv in Windows
@@ -113,4 +112,4 @@ python3 main.py
 
 ## Application Manual
 
-[Application Manual Link](https://docs.google.com/document/d/182j2NCudUOpFVlQWubM5h_SFGsRfmuCIIGO2qvDP7qM/edit?usp=sharing)
+[Application Manual Link](https://docs.google.com/document/d/1Kof0faIbQw6ZpipOMu2rQnFB9k94W7E_zarcA06d-6g/edit?usp=sharing)
